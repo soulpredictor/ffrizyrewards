@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-    const API_URL = "http://dono-03.danbot.host:2163/api/leaderboard";
+    const API_URL = "/api/leaderboard";
     const MAX_PLAYERS = 10;
 
     const formatCurrency = (value) => {

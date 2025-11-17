@@ -1,0 +1,10 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/index", "destination": "/index.html" },
+    { "source": "/stream", "destination": "/stream.html" },
+    { "source": "/api/leaderboard", "destination": "/api/leaderboard.py" }
+  ]
+}
+
