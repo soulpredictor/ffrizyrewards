@@ -260,11 +260,11 @@ body {
 
 @media (max-width: 991px) {
   .header {
-    position: fixed;
-    top: 0;
-    left: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
     transform: none;
-    width: 100%;
+  width: 100%;
     border-radius: 0;
     padding: 0.75rem 1rem;
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.55);
