@@ -1,6 +1,7 @@
 import json
 import os
-import requests
+import urllib.request
+from http import HTTPStatus
 
 
 API_URL = os.environ.get(
@@ -10,29 +11,30 @@ API_URL = os.environ.get(
 API_TIMEOUT = float(os.environ.get("SHUFFLE_STATS_TIMEOUT", "8"))
 
 
+def _json_response(body: dict, status: int):
+    return {
+        "statusCode": status,
+        "headers": {
+            "Content-Type": "application/json",
+            "Cache-Control": "public, max-age=60" if status == 200 else "no-store",
+        },
+        "body": json.dumps(body),
+    }
+
+
 def handler(request):
     try:
-        upstream = requests.get(API_URL, timeout=API_TIMEOUT)
-        upstream.raise_for_status()
-        payload = upstream.json()
-    except requests.RequestException:
-        return (
-            json.dumps({"error": "Unable to reach upstream leaderboard API"}),
-            502,
-            {"Content-Type": "application/json"},
-        )
-    except ValueError:
-        return (
-            json.dumps({"error": "Invalid response from upstream leaderboard API"}),
-            502,
-            {"Content-Type": "application/json"},
+        with urllib.request.urlopen(API_URL, timeout=API_TIMEOUT) as upstream:
+            payload = json.loads(upstream.read().decode("utf-8"))
+    except Exception as exc:  # pragma: no cover
+        return _json_response(
+            {"error": "Unable to reach upstream leaderboard API"}, HTTPStatus.BAD_GATEWAY
         )
 
     if not isinstance(payload, list):
-        return (
-            json.dumps({"error": "Unexpected payload format from upstream API"}),
-            502,
-            {"Content-Type": "application/json"},
+        return _json_response(
+            {"error": "Unexpected payload format from upstream API"},
+            HTTPStatus.BAD_GATEWAY,
         )
 
     simplified = [
@@ -43,9 +45,5 @@ def handler(request):
         for entry in payload
     ]
 
-    headers = {
-        "Content-Type": "application/json",
-        "Cache-Control": "public, max-age=60",
-    }
-    return json.dumps(simplified), 200, headers
+    return _json_response(simplified, HTTPStatus.OK)
 
