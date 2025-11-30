@@ -174,6 +174,8 @@ def leaderboard():
     
     If endTime is provided, it will be stored and used to stop counting wagers after that time.
     """
+    global _leaderboard_end_time
+    
     start_time = request.args.get("startTime")
     end_time = request.args.get("endTime")
     
