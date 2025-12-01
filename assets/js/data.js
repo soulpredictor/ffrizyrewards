@@ -8,9 +8,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const urlParams = new URLSearchParams(window.location.search);
     const dayParam = urlParams.get('day'); // e.g., ?day=1 for December 1st
 
-    // Default leaderboard period: NOW to December 30, 2025
-    const now = new Date();
-    const defaultStartTime = now.getTime(); // Start from now
+    // Default leaderboard period: December 1, 2025 to December 30, 2025
+    // This resets wagers to $0 and only counts from Dec 1-30
+    const defaultStartDate = new Date(Date.UTC(2025, 11, 1, 0, 0, 0)); // December 1, 2025 00:00:00 UTC
+    const defaultStartTime = defaultStartDate.getTime();
     
     // End: December 30, 2025 at 23:59:59 UTC
     const endDate = new Date(Date.UTC(2025, 11, 30, 23, 59, 59)); // December 30, 2025
@@ -28,12 +29,12 @@ document.addEventListener("DOMContentLoaded", () => {
             endTime = dayEnd.getTime();
             console.log(`Showing wagers for December ${day}, 2025`);
         } else {
-            // Invalid day, use default
+            // Invalid day, use default (Dec 1-30)
             startTime = defaultStartTime;
             endTime = defaultEndTime;
         }
     } else {
-        // Default: Show wagers from now to December 30
+        // Default: Show wagers from December 1 to December 30 (resets to $0, only counts Dec 1-30)
         startTime = defaultStartTime;
         endTime = defaultEndTime;
     }
@@ -48,12 +49,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const updateLeaderboard = () => {
         // Build URL with startTime and endTime parameters
-        // This limits wagers to only count during the specified period
+        // This resets wagers to $0 and only counts wagers from Dec 1-30, 2025
         const url = new URL(API_URL, window.location.origin);
         url.searchParams.set("startTime", startTime.toString());
         url.searchParams.set("endTime", endTime.toString());
 
-        fetch(url, { cache: "no-store" })
+        // Fetch with no cache for fresh data
+        fetch(url, { 
+            cache: "no-store",
+            headers: {
+                'Cache-Control': 'no-cache'
+            }
+        })
             .then((response) => {
                 if (!response.ok) {
                     throw new Error(`Shuffle API responded with ${response.status}`);
@@ -112,12 +119,12 @@ document.addEventListener("DOMContentLoaded", () => {
             });
     };
 
-    // Initial load
+    // Initial load immediately
     updateLeaderboard();
 
-    // Refresh every 20 seconds (matching backend polling interval)
+    // Refresh every 10 seconds for faster updates
     // Continue refreshing even after leaderboard ends to show final data
     refreshInterval = setInterval(() => {
         updateLeaderboard();
-    }, 20000); // 20 seconds
+    }, 10000); // 10 seconds for faster updates
 });
