@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const updateLeaderboard = () => {
-        // Check if leaderboard has ended
+        // Check if leaderboard has ended (but still show data, just stop refreshing)
         const now = new Date().getTime();
         if (now >= endTime) {
             leaderboardEnded = true;
@@ -27,7 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        // Build URL with endTime parameter
+        // Build URL with endTime parameter (always send it so backend uses it to limit wagers)
         const url = new URL(API_URL, window.location.origin);
         url.searchParams.set("endTime", endTime.toString());
 
@@ -56,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     throw new Error("Unexpected API response shape");
                 }
 
+                // Always display data, even if leaderboard has ended
                 const sorted = data
                     .filter((player) => typeof player?.wagerAmount === "number")
                     .sort((a, b) => b.wagerAmount - a.wagerAmount)
