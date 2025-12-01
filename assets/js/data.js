@@ -87,7 +87,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     data = [];
                 }
 
-                // Sort and display data
+                // Always ensure data is an array
+                if (!Array.isArray(data)) {
+                    console.warn("Data is not an array, using empty array");
+                    data = [];
+                }
+
+                // Sort and display data (include entries with 0 wagerAmount too)
                 const sorted = data
                     .filter((player) => player && typeof player?.wagerAmount === "number")
                     .sort((a, b) => b.wagerAmount - a.wagerAmount)
