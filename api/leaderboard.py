@@ -218,36 +218,45 @@ def leaderboard():
                 if _leaderboard_end_time:
                     end_time_str = str(int(_leaderboard_end_time.timestamp() * 1000))
             
-            # If leaderboard has ended or we have no cached data, fetch fresh data with endTime
+            # Check cached data
             with _data_lock:
                 cached_data = _data_store.get("lifetime", [])
             
-            if is_leaderboard_ended() or not cached_data or len(cached_data) == 0:
+            # Always fetch if no cached data, or if leaderboard has ended (to get final data)
+            if not cached_data or len(cached_data) == 0 or is_leaderboard_ended():
                 # Fetch fresh data with endTime to ensure we only count wagers up to end time
                 try:
                     fresh_data = fetch_leaderboard_data(end_time=end_time_str)
-                    with _data_lock:
-                        _data_store["lifetime"] = fresh_data
-                    data = fresh_data
+                    if fresh_data and len(fresh_data) > 0:
+                        with _data_lock:
+                            _data_store["lifetime"] = fresh_data
+                        data = fresh_data
+                    else:
+                        # If fetch returned empty, use cached data if available
+                        data = cached_data if cached_data else []
                 except Exception as e:
-                    app.logger.error(f"Error fetching leaderboard data: {e}")
-                    # Use cached data as fallback
+                    app.logger.error(f"Error fetching leaderboard data: {e}", exc_info=True)
+                    # Use cached data as fallback, or empty array if no cache
                     data = cached_data if cached_data else []
             else:
                 # Use cached data
                 data = cached_data
     
+    # Ensure data is always a list
     if not isinstance(data, list):
-        abort(502, description="Unexpected data format")
-
+        app.logger.error(f"Data is not a list: {type(data)}")
+        data = []
+    
     # Process and mask usernames
     simplified = [
         {
             "username": mask_username(entry.get("username", "")),
             "wagerAmount": float(entry.get("wagerAmount", 0) or 0),
         }
-        for entry in data
+        for entry in data if isinstance(entry, dict)
     ]
+    
+    app.logger.info(f"Returning {len(simplified)} leaderboard entries")
     
     # Add metadata about whether leaderboard has ended
     response_data = {
