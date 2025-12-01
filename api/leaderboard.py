@@ -148,28 +148,26 @@ def leaderboard():
             else:
                 current_data = []
     
-    # Set baseline on first fetch when startTime is provided (leaderboard start)
+    # Set baseline ONCE on first fetch when startTime is provided (leaderboard start)
     # This captures the wager amounts at the start of the leaderboard period
-    if start_time:
+    # CRITICAL: Baseline must NEVER be updated after initial set, otherwise wagers reset to 0
+    if start_time and not _baseline_set:
         with _baseline_lock:
-            # Always update baseline when startTime is provided and we have data
-            if current_data and len(current_data) > 0:
-                baseline_updated = False
+            # Double-check inside lock to prevent race condition
+            if not _baseline_set and current_data and len(current_data) > 0:
                 for entry in current_data:
                     if isinstance(entry, dict):
                         username = entry.get("username", "")
                         wager_amount = float(entry.get("wagerAmount", 0) or 0)
-                        # Set/update baseline for all users
-                        if username not in _baseline_wagers or not _baseline_set:
+                        # ONLY set baseline if not already set for this user
+                        if username not in _baseline_wagers:
                             _baseline_wagers[username] = wager_amount
-                            baseline_updated = True
-                if baseline_updated or not _baseline_set:
-                    _baseline_set = True
-                    app.logger.info(f"Baseline wagers set/updated: {len(_baseline_wagers)} users")
+                _baseline_set = True
+                app.logger.info(f"Baseline wagers SET ONCE: {len(_baseline_wagers)} users - will NEVER update again")
             elif not _baseline_set:
                 # If no data but baseline not set, mark as set to avoid repeated attempts
                 _baseline_set = True
-                app.logger.warning("No data received, baseline will be set on next successful fetch")
+                app.logger.warning("No data received on first fetch, baseline marked as set")
     
     # Calculate NEW wagers only (current - baseline)
     # Always return data even if empty to ensure frontend receives consistent response
@@ -180,6 +178,13 @@ def leaderboard():
                 if isinstance(entry, dict):
                     username = entry.get("username", "")
                     current_wager = float(entry.get("wagerAmount", 0) or 0)
+                    
+                    # If baseline is set and user not in baseline, add them with current wager as baseline
+                    # This allows new users to join the leaderboard starting from 0
+                    if _baseline_set and username not in _baseline_wagers:
+                        _baseline_wagers[username] = current_wager
+                        app.logger.info(f"New user added to baseline: {mask_username(username)} with baseline {current_wager}")
+                    
                     baseline_wager = _baseline_wagers.get(username, 0.0)
                     new_wager = max(0, current_wager - baseline_wager)  # Only show positive new wagers
                     
