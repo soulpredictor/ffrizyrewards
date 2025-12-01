@@ -122,51 +122,84 @@ def leaderboard():
             app.logger.warning(f"Invalid endTime format: {end_time}, error: {e}")
     
     # JUGAD: Fetch CURRENT total wagers (without time params to get all data)
-    try:
-        current_data = fetch_leaderboard_data(start_time=None, end_time=None)
-    except Exception as e:
-        app.logger.error(f"Error fetching leaderboard data: {e}", exc_info=True)
-        current_data = []
-    
-    # Ensure data is always a list
-    if not isinstance(current_data, list):
-        app.logger.error(f"Data is not a list: {type(current_data)}")
-        current_data = []
+    # Retry logic: try up to 2 times if first fetch fails or returns empty
+    current_data = []
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            current_data = fetch_leaderboard_data(start_time=None, end_time=None)
+            # Ensure data is always a list
+            if not isinstance(current_data, list):
+                app.logger.error(f"Data is not a list: {type(current_data)}")
+                current_data = []
+            
+            # If we got data, break out of retry loop
+            if current_data and len(current_data) > 0:
+                break
+            elif attempt < max_retries - 1:
+                app.logger.warning(f"Empty data received, retrying... (attempt {attempt + 1}/{max_retries})")
+                import time
+                time.sleep(0.5)  # Small delay before retry
+        except Exception as e:
+            app.logger.error(f"Error fetching leaderboard data (attempt {attempt + 1}): {e}", exc_info=True)
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(0.5)  # Small delay before retry
+            else:
+                current_data = []
     
     # Set baseline on first fetch when startTime is provided (leaderboard start)
     # This captures the wager amounts at the start of the leaderboard period
     if start_time:
         with _baseline_lock:
-            # Update baseline if not set, or if we have new users
-            if not _baseline_set or len(_baseline_wagers) == 0:
+            # Always update baseline when startTime is provided and we have data
+            if current_data and len(current_data) > 0:
+                baseline_updated = False
                 for entry in current_data:
                     if isinstance(entry, dict):
                         username = entry.get("username", "")
                         wager_amount = float(entry.get("wagerAmount", 0) or 0)
-                        # Only set baseline if not already set for this user
-                        if username not in _baseline_wagers:
+                        # Set/update baseline for all users
+                        if username not in _baseline_wagers or not _baseline_set:
                             _baseline_wagers[username] = wager_amount
+                            baseline_updated = True
+                if baseline_updated or not _baseline_set:
+                    _baseline_set = True
+                    app.logger.info(f"Baseline wagers set/updated: {len(_baseline_wagers)} users")
+            elif not _baseline_set:
+                # If no data but baseline not set, mark as set to avoid repeated attempts
                 _baseline_set = True
-                app.logger.info(f"Baseline wagers updated: {len(_baseline_wagers)} users")
+                app.logger.warning("No data received, baseline will be set on next successful fetch")
     
     # Calculate NEW wagers only (current - baseline)
+    # Always return data even if empty to ensure frontend receives consistent response
     simplified = []
     with _baseline_lock:
-        for entry in current_data:
-            if isinstance(entry, dict):
-                username = entry.get("username", "")
-                current_wager = float(entry.get("wagerAmount", 0) or 0)
-                baseline_wager = _baseline_wagers.get(username, 0.0)
-                new_wager = max(0, current_wager - baseline_wager)  # Only show positive new wagers
-                
-                simplified.append({
-                    "username": mask_username(username),
-                    "wagerAmount": new_wager,
-                })
+        if current_data and len(current_data) > 0:
+            for entry in current_data:
+                if isinstance(entry, dict):
+                    username = entry.get("username", "")
+                    current_wager = float(entry.get("wagerAmount", 0) or 0)
+                    baseline_wager = _baseline_wagers.get(username, 0.0)
+                    new_wager = max(0, current_wager - baseline_wager)  # Only show positive new wagers
+                    
+                    simplified.append({
+                        "username": mask_username(username),
+                        "wagerAmount": new_wager,
+                    })
+        else:
+            # If no current data but we have baseline, return baseline users with 0 wagers
+            if _baseline_set and len(_baseline_wagers) > 0:
+                for username in _baseline_wagers.keys():
+                    simplified.append({
+                        "username": mask_username(username),
+                        "wagerAmount": 0.0,
+                    })
+                app.logger.info("No current data, returning baseline users with 0 wagers")
     
     app.logger.info(f"Returning {len(simplified)} leaderboard entries (new wagers only)")
     
-    # Add metadata about whether leaderboard has ended
+    # Always return data array, even if empty
     response_data = {
         "data": simplified,
         "ended": is_leaderboard_ended()
