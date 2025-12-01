@@ -41,29 +41,49 @@ def fetch_leaderboard_data(start_time: Optional[str] = None, end_time: Optional[
     """
     Fetch leaderboard data directly from Shuffle API.
     Uses startTime and endTime to reset wager count - only counts wagers within this period.
+    IMPORTANT: Shuffle API expects Unix timestamps in SECONDS, not milliseconds!
     Returns the raw data from the API.
     Tries multiple approaches if first attempt returns empty data.
     """
     # Build URL with time parameters to reset wagers
-    # startTime and endTime reset wagers to $0, only counting wagers from Dec 1-30, 2025
+    # Shuffle API requires Unix timestamps in SECONDS (not milliseconds)
+    # Frontend sends milliseconds, so we convert to seconds
     url = API_URL
     params = {}
     if start_time:
-        params["startTime"] = str(start_time)  # Ensure string format, timestamp in milliseconds
+        # Convert milliseconds to seconds (Shuffle API expects seconds)
+        # Timestamps > 10 digits are milliseconds, <= 10 digits are seconds
+        start_val = int(start_time)
+        start_seconds = start_val // 1000 if start_val > 9999999999 else start_val
+        params["startTime"] = str(start_seconds)
+        app.logger.debug(f"Converted startTime: {start_time}ms -> {start_seconds}s")
     if end_time:
-        params["endTime"] = str(end_time)  # Ensure string format, timestamp in milliseconds
+        # Convert milliseconds to seconds (Shuffle API expects seconds)
+        end_val = int(end_time)
+        end_seconds = end_val // 1000 if end_val > 9999999999 else end_val
+        params["endTime"] = str(end_seconds)
+        app.logger.debug(f"Converted endTime: {end_time}ms -> {end_seconds}s")
     
     # Try fetching with provided parameters first
     try:
-        app.logger.info(f"Fetching from Shuffle API: {url} with params: {params}")
+        app.logger.info(f"Fetching from Shuffle API: {url} with params: {params} (timestamps in SECONDS)")
         response = SESSION.get(url, params=params, timeout=API_TIMEOUT)
         
-        # Handle rate limit error
+        # Handle API errors
         if response.status_code == 400:
             error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
-            if error_data.get('message') == 'TOO_MANY_REQUEST':
+            error_message = error_data.get('message', '')
+            
+            if error_message == 'TOO_MANY_REQUEST':
                 app.logger.warning("Rate limit exceeded: TOO_MANY_REQUEST")
                 # Try without params as fallback
+                return fetch_without_time_params()
+            elif error_message == 'REFEREES_NOT_FOUND':
+                app.logger.info("No referees found - returning empty array")
+                return []  # This is normal if user has no referees
+            else:
+                app.logger.warning(f"API returned 400 error: {error_data}")
+                # Try fallback
                 return fetch_without_time_params()
         
         response.raise_for_status()
@@ -73,14 +93,9 @@ def fetch_leaderboard_data(start_time: Optional[str] = None, end_time: Optional[
             app.logger.error(f"Unexpected payload format from upstream API: {type(payload)}")
             return []
         
-        # If we got data, return it
-        if payload and len(payload) > 0:
-            app.logger.info(f"Successfully fetched {len(payload)} entries from Shuffle API with time params")
-            return payload
-        else:
-            # Empty data, try fallback without time params
-            app.logger.warning("Empty data received with time params, trying fallback...")
-            return fetch_without_time_params()
+        # Return data even if empty (empty array is valid - means no wagers in that period)
+        app.logger.info(f"Successfully fetched {len(payload)} entries from Shuffle API with time params")
+        return payload
         
     except requests.RequestException as exc:
         app.logger.error(f"Failed to fetch upstream leaderboard: {exc}", exc_info=True)
@@ -173,7 +188,7 @@ def leaderboard():
                 "wagerAmount": wager_amount,
             })
     
-    app.logger.info(f"Returning {len(simplified)} leaderboard entries")
+    app.logger.info(f"Returning {len(simplified)} leaderboard entries (including {sum(1 for e in simplified if e['wagerAmount'] == 0)} with $0)")
     
     # Add metadata about whether leaderboard has ended
     response_data = {
