@@ -4,9 +4,39 @@ document.addEventListener("DOMContentLoaded", () => {
     let refreshInterval = null;
     let leaderboardEnded = false;
 
-    // Get the end time from the timer (same as timer.js)
-    const targetDate = new Date(Date.UTC(2025, 10, 30, 18 + 7, 59, 59)); // MST = UTC-7
-    const endTime = targetDate.getTime(); // Milliseconds timestamp
+    // Get URL parameters to check if viewing a specific day
+    const urlParams = new URLSearchParams(window.location.search);
+    const dayParam = urlParams.get('day'); // e.g., ?day=1 for December 1st
+
+    // Default leaderboard period: NOW to December 30, 2025
+    const now = new Date();
+    const defaultStartTime = now.getTime(); // Start from now
+    
+    // End: December 30, 2025 at 23:59:59 UTC
+    const endDate = new Date(Date.UTC(2025, 11, 30, 23, 59, 59)); // December 30, 2025
+    const defaultEndTime = endDate.getTime();
+
+    // If day parameter is provided (e.g., ?day=1), show data for that specific day
+    let startTime, endTime;
+    if (dayParam) {
+        const day = parseInt(dayParam);
+        if (day >= 1 && day <= 31) {
+            // Show data for specific day: December [day], 2025
+            const dayStart = new Date(Date.UTC(2025, 11, day, 0, 0, 0)); // December [day], 00:00:00
+            const dayEnd = new Date(Date.UTC(2025, 11, day, 23, 59, 59)); // December [day], 23:59:59
+            startTime = dayStart.getTime();
+            endTime = dayEnd.getTime();
+            console.log(`Showing wagers for December ${day}, 2025`);
+        } else {
+            // Invalid day, use default
+            startTime = defaultStartTime;
+            endTime = defaultEndTime;
+        }
+    } else {
+        // Default: Show wagers from now to December 30
+        startTime = defaultStartTime;
+        endTime = defaultEndTime;
+    }
 
     const formatCurrency = (value) => {
         const amount = Number(value) || 0;
@@ -17,8 +47,10 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const updateLeaderboard = () => {
-        // Build URL with endTime parameter (always pass it to limit wagers to leaderboard period)
+        // Build URL with startTime and endTime parameters
+        // This limits wagers to only count during the specified period
         const url = new URL(API_URL, window.location.origin);
+        url.searchParams.set("startTime", startTime.toString());
         url.searchParams.set("endTime", endTime.toString());
 
         fetch(url, { cache: "no-store" })
