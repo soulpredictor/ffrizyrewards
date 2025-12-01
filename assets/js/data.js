@@ -44,27 +44,36 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
                     }
                 } else {
-                    throw new Error("Unexpected API response shape");
+                    console.error("Unexpected API response shape:", response);
+                    data = [];
                 }
 
                 // Sort and display data
                 const sorted = data
-                    .filter((player) => typeof player?.wagerAmount === "number")
+                    .filter((player) => player && typeof player?.wagerAmount === "number")
                     .sort((a, b) => b.wagerAmount - a.wagerAmount)
                     .slice(0, MAX_PLAYERS);
 
-                sorted.forEach((player, index) => {
+                // Update all player slots (fill with empty if no data)
+                for (let index = 0; index < MAX_PLAYERS; index++) {
                     const nameEl = document.getElementById(`user${index}_name`);
                     const wagerEl = document.getElementById(`user${index}_wager`);
 
                     if (!nameEl || !wagerEl) {
-                        return;
+                        continue;
                     }
 
-                    // Username is already masked by the backend API
-                    nameEl.textContent = player.username || "User";
-                    wagerEl.textContent = formatCurrency(player.wagerAmount);
-                });
+                    if (index < sorted.length && sorted[index]) {
+                        const player = sorted[index];
+                        // Username is already masked by the backend API
+                        nameEl.textContent = player.username || "User";
+                        wagerEl.textContent = formatCurrency(player.wagerAmount);
+                    } else {
+                        // Show placeholder if no data for this rank
+                        nameEl.textContent = "----";
+                        wagerEl.textContent = "----";
+                    }
+                }
             })
             .catch((error) => {
                 console.error("Failed to load leaderboard data:", error);
