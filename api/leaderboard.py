@@ -21,6 +21,11 @@ app.config["JSONIFY_PRETTYPRINT_REGULAR"] = False
 _leaderboard_end_time: Optional[datetime] = None
 _end_time_lock = threading.Lock()
 
+# Baseline wagers storage (to calculate new wagers only)
+_baseline_wagers: Dict[str, float] = {}  # username -> wagerAmount
+_baseline_lock = threading.Lock()
+_baseline_set = False
+
 
 def mask_username(username: str) -> str:
     """
@@ -94,11 +99,10 @@ def is_leaderboard_ended() -> bool:
 @app.route("/api/leaderboard", methods=["GET"])
 def leaderboard():
     """
-    Fetch leaderboard data directly from Shuffle API on every request.
-    Supports startTime and endTime query parameters.
-    Usernames are masked for privacy.
+    Fetch leaderboard data directly from Shuffle API.
+    JUGAD: Fetches current total wagers, stores baseline, and shows only NEW wagers.
     """
-    global _leaderboard_end_time
+    global _leaderboard_end_time, _baseline_wagers, _baseline_set
     
     start_time = request.args.get("startTime")
     end_time = request.args.get("endTime")
@@ -117,28 +121,50 @@ def leaderboard():
         except (ValueError, OSError) as e:
             app.logger.warning(f"Invalid endTime format: {end_time}, error: {e}")
     
-    # ALWAYS fetch directly from Shuffle API
+    # JUGAD: Fetch CURRENT total wagers (without time params to get all data)
     try:
-        data = fetch_leaderboard_data(start_time=start_time, end_time=end_time)
+        current_data = fetch_leaderboard_data(start_time=None, end_time=None)
     except Exception as e:
         app.logger.error(f"Error fetching leaderboard data: {e}", exc_info=True)
-        data = []
+        current_data = []
     
     # Ensure data is always a list
-    if not isinstance(data, list):
-        app.logger.error(f"Data is not a list: {type(data)}")
-        data = []
+    if not isinstance(current_data, list):
+        app.logger.error(f"Data is not a list: {type(current_data)}")
+        current_data = []
     
-    # Process and mask usernames
-    simplified = [
-        {
-            "username": mask_username(entry.get("username", "")),
-            "wagerAmount": float(entry.get("wagerAmount", 0) or 0),
-        }
-        for entry in data if isinstance(entry, dict)
-    ]
+    # Set baseline on first fetch when startTime is provided (leaderboard start)
+    # This captures the wager amounts at the start of the leaderboard period
+    if start_time:
+        with _baseline_lock:
+            # Update baseline if not set, or if we have new users
+            if not _baseline_set or len(_baseline_wagers) == 0:
+                for entry in current_data:
+                    if isinstance(entry, dict):
+                        username = entry.get("username", "")
+                        wager_amount = float(entry.get("wagerAmount", 0) or 0)
+                        # Only set baseline if not already set for this user
+                        if username not in _baseline_wagers:
+                            _baseline_wagers[username] = wager_amount
+                _baseline_set = True
+                app.logger.info(f"Baseline wagers updated: {len(_baseline_wagers)} users")
     
-    app.logger.info(f"Returning {len(simplified)} leaderboard entries")
+    # Calculate NEW wagers only (current - baseline)
+    simplified = []
+    with _baseline_lock:
+        for entry in current_data:
+            if isinstance(entry, dict):
+                username = entry.get("username", "")
+                current_wager = float(entry.get("wagerAmount", 0) or 0)
+                baseline_wager = _baseline_wagers.get(username, 0.0)
+                new_wager = max(0, current_wager - baseline_wager)  # Only show positive new wagers
+                
+                simplified.append({
+                    "username": mask_username(username),
+                    "wagerAmount": new_wager,
+                })
+    
+    app.logger.info(f"Returning {len(simplified)} leaderboard entries (new wagers only)")
     
     # Add metadata about whether leaderboard has ended
     response_data = {
@@ -152,3 +178,4 @@ def leaderboard():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
     app.run(host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG") == "1")
+
