@@ -17,23 +17,17 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     const updateLeaderboard = () => {
-        // Check if leaderboard has ended (for display purposes)
-        const now = new Date().getTime();
-        if (now >= endTime) {
-            leaderboardEnded = true;
-        }
-
-        // Build URL with endTime parameter - this ensures backend only counts wagers up to this time
+        // Build URL with endTime parameter (always pass it to limit wagers to leaderboard period)
         const url = new URL(API_URL, window.location.origin);
         url.searchParams.set("endTime", endTime.toString());
 
         fetch(url, { cache: "no-store" })
-        .then((response) => {
-            if (!response.ok) {
-                throw new Error(`Shuffle API responded with ${response.status}`);
-            }
-            return response.json();
-        })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Shuffle API responded with ${response.status}`);
+                }
+                return response.json();
+            })
             .then((response) => {
                 // Handle both old format (array) and new format (object with data and ended)
                 let data;
@@ -43,45 +37,45 @@ document.addEventListener("DOMContentLoaded", () => {
                     data = response.data;
                     if (response.ended) {
                         leaderboardEnded = true;
+                        // Stop auto-refresh after leaderboard ends, but still allow manual refresh
+                        if (refreshInterval) {
+                            clearInterval(refreshInterval);
+                            refreshInterval = null;
+                        }
                     }
                 } else {
-                throw new Error("Unexpected API response shape");
-            }
-
-            // Only show data if we have entries
-            if (!data || data.length === 0) {
-                console.warn("No leaderboard data available");
-                return;
-            }
-
-            const sorted = data
-                .filter((player) => typeof player?.wagerAmount === "number")
-                .sort((a, b) => b.wagerAmount - a.wagerAmount)
-                .slice(0, MAX_PLAYERS);
-
-            sorted.forEach((player, index) => {
-                const nameEl = document.getElementById(`user${index}_name`);
-                const wagerEl = document.getElementById(`user${index}_wager`);
-
-                if (!nameEl || !wagerEl) {
-                    return;
+                    throw new Error("Unexpected API response shape");
                 }
+
+                // Sort and display data
+                const sorted = data
+                    .filter((player) => typeof player?.wagerAmount === "number")
+                    .sort((a, b) => b.wagerAmount - a.wagerAmount)
+                    .slice(0, MAX_PLAYERS);
+
+                sorted.forEach((player, index) => {
+                    const nameEl = document.getElementById(`user${index}_name`);
+                    const wagerEl = document.getElementById(`user${index}_wager`);
+
+                    if (!nameEl || !wagerEl) {
+                        return;
+                    }
 
                     // Username is already masked by the backend API
                     nameEl.textContent = player.username || "User";
-                wagerEl.textContent = formatCurrency(player.wagerAmount);
+                    wagerEl.textContent = formatCurrency(player.wagerAmount);
+                });
+            })
+            .catch((error) => {
+                console.error("Failed to load leaderboard data:", error);
             });
-        })
-        .catch((error) => {
-            console.error("Failed to load leaderboard data:", error);
-        });
     };
 
     // Initial load
     updateLeaderboard();
 
-    // Continue refreshing every 20 seconds even after leaderboard ends
-    // Backend uses endTime parameter so it won't count new wagers, but will keep showing the data
+    // Refresh every 20 seconds (matching backend polling interval)
+    // Continue refreshing even after leaderboard ends to show final data
     refreshInterval = setInterval(() => {
         updateLeaderboard();
     }, 20000); // 20 seconds
