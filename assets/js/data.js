@@ -172,7 +172,29 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log(`✅ Successfully displaying ${sorted.length} players with latest wager data`);
                 }
 
-                // Update all player slots (fill with empty if no data)
+                // Shift rankings: move actual 7th person to 8th position, insert "i****f" at 7th
+                const displayData = [];
+                
+                // Build display array with shifted positions
+                for (let i = 0; i < MAX_PLAYERS; i++) {
+                    if (i < sorted.length) {
+                        if (i === 6) {
+                            // Save the actual 7th person data for 8th position
+                            displayData[7] = sorted[i]; // Move to index 7 (8th position)
+                        } else if (i === 7) {
+                            // Insert the actual 8th person at 7th position
+                            displayData[6] = sorted[i];
+                        } else {
+                            // Keep other positions as is
+                            displayData[i] = sorted[i];
+                        }
+                    }
+                }
+                
+                // Insert hardcoded "i****f" at 7th position (index 6)
+                displayData[6] = { username: "iva**f", wagerAmount: 0 };
+                
+                // Update all player slots
                 for (let index = 0; index < MAX_PLAYERS; index++) {
                     const nameEl = document.getElementById(`user${index}_name`);
                     const wagerEl = document.getElementById(`user${index}_wager`);
@@ -181,15 +203,9 @@ document.addEventListener("DOMContentLoaded", () => {
                         continue;
                     }
 
-                    if (index < sorted.length && sorted[index]) {
-                        const player = sorted[index];
-                        // Username is already masked by the backend API
-                        // Hardcode 7th user (index 6) username to "i****f"
-                        if (index === 7) {
-                            nameEl.textContent = "iva**f";
-                        } else {
-                            nameEl.textContent = player.username || "User";
-                        }
+                    if (index < displayData.length && displayData[index]) {
+                        const player = displayData[index];
+                        nameEl.textContent = player.username || "User";
                         wagerEl.textContent = formatCurrency(player.wagerAmount);
                     } else {
                         // Show placeholder if no data for this rank
