@@ -180,11 +180,15 @@ document.addEventListener("DOMContentLoaded", () => {
                     displayData.push(sorted[i]);
                 }
                 
-                // Insert hardcoded user at position 6 (7th place)
+                // Insert hardcoded user at position 6 (7th place) with increased wager
+                const originalWager = sorted.length >= 7 ? sorted[6].wagerAmount : 0;
+                const increasedWager = originalWager + 500;
                 displayData.push({
                     username: "iva**f",
-                    wagerAmount: sorted.length >= 7 ? sorted[6].wagerAmount : 0
+                    wagerAmount: increasedWager
                 });
+                
+                console.log(`📈 Increased wager for i****f: $${formatCurrency(originalWager)} → $${formatCurrency(increasedWager)}`);
                 
                 // Add remaining players starting from original 7th position
                 for (let i = 6; i < sorted.length; i++) {
