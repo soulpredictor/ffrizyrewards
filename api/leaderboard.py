@@ -164,6 +164,10 @@ def leaderboard():
                 "wagerAmount": wager_amount,
             })
     
+    # Hardcode 7th user (index 6) to be "i****f"
+    if len(simplified) >= 7:
+        simplified[6]["username"] = "i****f"
+    
     app.logger.info(f"Returning {len(simplified)} leaderboard entries (including {sum(1 for e in simplified if e['wagerAmount'] == 0)} with $0)")
     
     # Add metadata about whether leaderboard has ended
