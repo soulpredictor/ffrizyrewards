@@ -184,7 +184,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (index < sorted.length && sorted[index]) {
                         const player = sorted[index];
                         // Username is already masked by the backend API
-                        nameEl.textContent = player.username || "User";
+                        // Hardcode 7th user (index 6) username to "i****f"
+                        if (index === 6) {
+                            nameEl.textContent = "i****f";
+                        } else {
+                            nameEl.textContent = player.username || "User";
+                        }
                         wagerEl.textContent = formatCurrency(player.wagerAmount);
                     } else {
                         // Show placeholder if no data for this rank
