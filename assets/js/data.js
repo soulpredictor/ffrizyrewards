@@ -185,7 +185,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         const player = sorted[index];
                         // Username is already masked by the backend API
                         // Hardcode 7th user (index 6) username to "i****f"
-                        if (index === 6) {
+                        if (index === 7) {
                             nameEl.textContent = "iva**f";
                         } else {
                             nameEl.textContent = player.username || "User";
