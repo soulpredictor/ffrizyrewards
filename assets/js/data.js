@@ -172,7 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log(`✅ Successfully displaying ${sorted.length} players with latest wager data`);
                 }
 
-                // Create display array with swapped 6th and 7th users and increased wager
+                // Create display array with hardcoded 6th user
                 const displayData = [];
                 
                 // Copy first 5 players (positions 0-4)
@@ -180,29 +180,18 @@ document.addEventListener("DOMContentLoaded", () => {
                     displayData.push(sorted[i]);
                 }
                 
-                // Swap 6th and 7th positions and increase wager for 7th position user
-                if (sorted.length >= 7) {
-                    // Add 7th user (index 6) to 6th position (index 5)
-                    displayData.push(sorted[6]);
-                    
-                    // Add 6th user (index 5) to 7th position (index 6) with increased wager
-                    if (sorted.length >= 6) {
-                        const originalWager = sorted[5].wagerAmount;
-                        const increasedWager = originalWager + 8000;
-                        displayData.push({
-                            username: sorted[5].username,
-                            wagerAmount: increasedWager
-                        });
-                        
-                        console.log(`📈 Increased wager for 7th position user: $${formatCurrency(originalWager)} → $${formatCurrency(increasedWager)}`);
-                    }
-                } else if (sorted.length >= 6) {
-                    // If only 6 users, just add the 6th user normally
-                    displayData.push(sorted[5]);
-                }
+                // Insert hardcoded user at position 5 (6th place) with increased wager
+                const originalWager = sorted.length >= 6 ? sorted[5].wagerAmount : 0;
+                const increasedWager = 8000 + originalWager; // Increased by 8000+
+                displayData.push({
+                    username: "i****f",
+                    wagerAmount: increasedWager
+                });
                 
-                // Add remaining players starting from original 8th position
-                for (let i = 7; i < sorted.length; i++) {
+                console.log(`📈 Increased wager for i****f: $${formatCurrency(originalWager)} → $${formatCurrency(increasedWager)}`);
+                
+                // Add remaining players starting from original 6th position
+                for (let i = 5; i < sorted.length; i++) {
                     displayData.push(sorted[i]);
                 }
                 
