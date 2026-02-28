@@ -172,26 +172,26 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log(`✅ Successfully displaying ${sorted.length} players with latest wager data`);
                 }
 
-                // Create display array with hardcoded 6th user
+                // Create display array with hardcoded 7th user
                 const displayData = [];
                 
-                // Copy first 5 players (positions 0-4)
-                for (let i = 0; i < 5 && i < sorted.length; i++) {
+                // Copy first 6 players (positions 0-5)
+                for (let i = 0; i < 6 && i < sorted.length; i++) {
                     displayData.push(sorted[i]);
                 }
                 
-                // Insert hardcoded user at position 5 (6th place) with increased wager
-                const originalWager = sorted.length >= 6 ? sorted[5].wagerAmount : 0;
-                const increasedWager = 8000 + originalWager; // Increased by 8000+
+                // Insert hardcoded user at position 6 (7th place) with increased wager
+                const originalWager = sorted.length >= 7 ? sorted[6].wagerAmount : 0;
+                const increasedWager = originalWager + 500;
                 displayData.push({
-                    username: "i****f",
+                    username: "iva**f",
                     wagerAmount: increasedWager
                 });
                 
                 console.log(`📈 Increased wager for i****f: $${formatCurrency(originalWager)} → $${formatCurrency(increasedWager)}`);
                 
-                // Add remaining players starting from original 6th position
-                for (let i = 5; i < sorted.length; i++) {
+                // Add remaining players starting from original 7th position
+                for (let i = 6; i < sorted.length; i++) {
                     displayData.push(sorted[i]);
                 }
                 
