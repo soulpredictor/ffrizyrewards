@@ -188,7 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (originalSeventh) {
                     const increasedWager = 8000 + originalSeventh.wagerAmount; // Increased by 8000+
                     displayData.push({
-                        username: "i****f",
+                        username: "iva**f",
                         wagerAmount: increasedWager
                     });
                     
