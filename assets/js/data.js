@@ -172,50 +172,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log(`✅ Successfully displaying ${sorted.length} players with latest wager data`);
                 }
 
-                // Create display array with hardcoded 6th user (swap 6th and 7th positions)
-                const displayData = [];
-                
-                // Copy first 5 players (positions 0-4)
-                for (let i = 0; i < 5 && i < sorted.length; i++) {
-                    displayData.push(sorted[i]);
-                }
-                
-                // Get the original 6th and 7th players if they exist
-                const originalSixth = sorted.length > 5 ? sorted[5] : null;
-                const originalSeventh = sorted.length > 6 ? sorted[6] : null;
-                
-                // Insert original 7th player at position 5 (6th place) with increased wager
-                if (originalSeventh) {
-                    const increasedWager = 8000 + originalSeventh.wagerAmount; // Increased by 8000+
-                    displayData.push({
-                        username: "iva**f",
-                        wagerAmount: increasedWager
-                    });
-                    
-                    console.log(`📈 Increased wager for i****f: $${formatCurrency(originalSeventh.wagerAmount)} → $${formatCurrency(increasedWager)}`);
-                } else if (originalSixth) {
-                    // If there's no 7th player, just put the 6th player in 6th place
-                    displayData.push(originalSixth);
-                }
-                
-                // Insert original 6th player at position 6 (7th place)
-                if (originalSixth) {
-                    displayData.push(originalSixth);
-                }
-                
-                // Add remaining players starting from original 8th position (index 7)
-                for (let i = 7; i < sorted.length; i++) {
-                    displayData.push(sorted[i]);
-                }
-                
-                // Trim to MAX_PLAYERS
-                const finalDisplay = displayData.slice(0, MAX_PLAYERS);
-                
-                console.log(`📊 Final display order:`);
-                finalDisplay.forEach((player, index) => {
-                    console.log(`  ${index + 1}. ${player.username} - $${formatCurrency(player.wagerAmount)}`);
-                });
-
                 // Update all player slots (fill with empty if no data)
                 for (let index = 0; index < MAX_PLAYERS; index++) {
                     const nameEl = document.getElementById(`user${index}_name`);
@@ -225,8 +181,9 @@ document.addEventListener("DOMContentLoaded", () => {
                         continue;
                     }
 
-                    if (index < finalDisplay.length && finalDisplay[index]) {
-                        const player = finalDisplay[index];
+                    if (index < sorted.length && sorted[index]) {
+                        const player = sorted[index];
+                        // Username is already masked by the backend API
                         nameEl.textContent = player.username || "User";
                         wagerEl.textContent = formatCurrency(player.wagerAmount);
                     } else {
