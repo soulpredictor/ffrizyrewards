@@ -7,7 +7,7 @@ from flask import Flask, jsonify, abort
 
 API_URL = os.environ.get(
     "SHUFFLE_STATS_URL",
-    "https://affiliate.shuffle.com/stats/96cc7e48-64b2-4120-b07d-779f3a9fd870",
+    "https://affiliate.shuffle.com/wager/96cc7e48-64b2-4120-b07d-779f3a9fd870",
 )
 API_TIMEOUT = float(os.environ.get("SHUFFLE_STATS_TIMEOUT", "8"))
 SESSION = requests.Session()
@@ -50,7 +50,9 @@ def leaderboard():
     simplified = [
         {
             "username": entry.get("username", ""),
-            "wagerAmount": float(entry.get("wagerAmount", 0) or 0),
+            # Frontend expects wagerAmount; use weighted wager as the leaderboard value.
+            "wagerAmount": float(entry.get("weightedWagerAmount", entry.get("wagerAmount", 0)) or 0),
+            "weightedWagerAmount": float(entry.get("weightedWagerAmount", 0) or 0),
         }
         for entry in payload
     ]
