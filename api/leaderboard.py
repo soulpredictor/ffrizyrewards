@@ -9,7 +9,7 @@ from flask import Flask, jsonify, request
 
 API_URL = os.environ.get(
     "SHUFFLE_STATS_URL",
-    "https://affiliate.shuffle.com/stats/96cc7e48-64b2-4120-b07d-779f3a9fd870",
+    "https://affiliate.shuffle.com/wager/96cc7e48-64b2-4120-b07d-779f3a9fd870",
 )
 API_TIMEOUT = float(os.environ.get("SHUFFLE_STATS_TIMEOUT", "5"))  # 5 second timeout
 SESSION = requests.Session()
@@ -157,11 +157,13 @@ def leaderboard():
     for entry in data:
         if isinstance(entry, dict):
             username = entry.get("username", "")
-            wager_amount = float(entry.get("wagerAmount", 0) or 0)
-            # Include entry even if wagerAmount is 0
+            weighted_wager_amount = float(entry.get("weightedWagerAmount", entry.get("wagerAmount", 0)) or 0)
+            # Include entry even if weighted wager is 0
             simplified.append({
                 "username": mask_username(username),
-                "wagerAmount": wager_amount,
+                # Frontend expects wagerAmount; set it to weighted wager for ranking/display.
+                "wagerAmount": weighted_wager_amount,
+                "weightedWagerAmount": weighted_wager_amount,
             })
     
     app.logger.info(f"Returning {len(simplified)} leaderboard entries (including {sum(1 for e in simplified if e['wagerAmount'] == 0)} with $0)")
