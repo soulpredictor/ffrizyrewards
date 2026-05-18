@@ -1,8 +1,12 @@
 document.addEventListener("DOMContentLoaded", () => {
-    const API_URL = "/api/leaderboard";
+    const ENDPOINTS = {
+        shuffle: "/api/leaderboard",
+        winovo: "/api/winovo/users",
+    };
     const MAX_PLAYERS = 10;
     let refreshInterval = null;
     let leaderboardEnded = false;
+    let currentSite = localStorage.getItem("leaderboardSite") || "shuffle";
 
     // Helper to create Date from Eastern time components
     function createEasternDate(year, month, day, hour, minute, second) {
@@ -100,20 +104,70 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     };
 
+    const updateSiteUI = () => {
+        const tabs = document.querySelectorAll("[data-leaderboard-site]");
+        tabs.forEach((el) => {
+            const site = el.getAttribute("data-leaderboard-site");
+            if (site === currentSite) {
+                el.classList.add("active");
+            } else {
+                el.classList.remove("active");
+            }
+        });
+
+        const labelEl = document.getElementById("leaderboardSiteLabel");
+        if (labelEl) {
+            labelEl.textContent = currentSite === "winovo" ? "Winovo" : "Shuffle";
+        }
+    };
+
+    const startRefresh = () => {
+        if (refreshInterval) {
+            return;
+        }
+        refreshInterval = setInterval(() => {
+            updateLeaderboard();
+        }, 12000);
+    };
+
+    const stopRefresh = () => {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+        }
+    };
+
+    document.querySelectorAll("[data-leaderboard-site]").forEach((el) => {
+        el.addEventListener("click", (e) => {
+            e.preventDefault();
+            const next = el.getAttribute("data-leaderboard-site");
+            if (!next || next === currentSite) {
+                return;
+            }
+            currentSite = next;
+            localStorage.setItem("leaderboardSite", currentSite);
+            updateSiteUI();
+            if (currentSite === "winovo") {
+                leaderboardEnded = false;
+                startRefresh();
+            }
+            updateLeaderboard();
+        });
+    });
+
     const updateLeaderboard = () => {
-        // Build URL with startTime and endTime parameters in exact format
-        // Format: startTime=1764591959590&endTime=1767139199000 (milliseconds timestamps)
-        // Add timestamp to prevent caching and ensure fresh data
-        const url = new URL(API_URL, window.location.origin);
-        url.searchParams.set("startTime", startTime.toString());
-        url.searchParams.set("endTime", endTime.toString());
-        url.searchParams.set("_t", Date.now().toString()); // Cache buster - ensures fresh data
-        
-        console.log(`[${new Date().toLocaleTimeString()}] Fetching fresh leaderboard data`);
+        const url = new URL(ENDPOINTS[currentSite] || ENDPOINTS.shuffle, window.location.origin);
+        if (currentSite === "shuffle") {
+            url.searchParams.set("startTime", startTime.toString());
+            url.searchParams.set("endTime", endTime.toString());
+            const startDateDisplay = new Date(startTime).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
+            const endDateDisplay = new Date(endTime).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
+            console.log(`Timestamps: startTime=${startTime} (${startDateDisplay} ET), endTime=${endTime} (${endDateDisplay} ET)`);
+        }
+        url.searchParams.set("_t", Date.now().toString());
+
+        console.log(`[${new Date().toLocaleTimeString()}] Fetching fresh leaderboard data (${currentSite})`);
         console.log(`URL: ${url.toString()}`);
-        const startDateDisplay = new Date(startTime).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
-        const endDateDisplay = new Date(endTime).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
-        console.log(`Timestamps: startTime=${startTime} (${startDateDisplay} ET), endTime=${endTime} (${endDateDisplay} ET)`);
 
         // Fetch with no cache for fresh data - always get latest
         fetch(url, { 
@@ -126,36 +180,45 @@ document.addEventListener("DOMContentLoaded", () => {
         })
             .then((response) => {
                 if (!response.ok) {
-                    throw new Error(`Shuffle API responded with ${response.status}`);
+                    throw new Error(`${currentSite} API responded with ${response.status}`);
                 }
                 return response.json();
             })
             .then((response) => {
-                // Handle both old format (array) and new format (object with data and ended)
-                let data;
-                if (Array.isArray(response)) {
-                    data = response;
-                } else if (response.data && Array.isArray(response.data)) {
-                    data = response.data;
-                    if (response.ended) {
-                        leaderboardEnded = true;
-                        // Stop auto-refresh after leaderboard ends, but still allow manual refresh
-                        if (refreshInterval) {
-                            clearInterval(refreshInterval);
-                            refreshInterval = null;
+                let normalized = [];
+                if (currentSite === "shuffle") {
+                    let data;
+                    if (Array.isArray(response)) {
+                        data = response;
+                    } else if (response.data && Array.isArray(response.data)) {
+                        data = response.data;
+                        if (response.ended) {
+                            leaderboardEnded = true;
+                            stopRefresh();
                         }
+                    } else {
+                        console.error("Unexpected API response shape:", response);
+                        data = [];
                     }
+                    normalized = data
+                        .filter((player) => player && typeof player?.wagerAmount === "number")
+                        .map((player) => ({
+                            username: player.username || "User",
+                            wagerAmount: Number(player.wagerAmount) || 0,
+                        }));
                 } else {
-                    console.error("Unexpected API response shape:", response);
-                    data = [];
+                    const data = response && Array.isArray(response.data) ? response.data : [];
+                    normalized = data.map((entry) => ({
+                        username: entry?.name || "User",
+                        wagerAmount: Number(entry?.wagered) || 0,
+                    }));
                 }
 
-                console.log(`✅ API returned ${data.length} entries (fresh monthly data)`);
+                console.log(`✅ API returned ${normalized.length} entries (${currentSite})`);
                 
                 // Sort and display data (include entries with 0 wagerAmount too)
                 // Always show latest data - no caching
-                const sorted = data
-                    .filter((player) => player && typeof player?.wagerAmount === "number")
+                const sorted = normalized
                     .sort((a, b) => b.wagerAmount - a.wagerAmount)
                     .slice(0, MAX_PLAYERS);
                 
@@ -183,7 +246,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     if (index < sorted.length && sorted[index]) {
                         const player = sorted[index];
-                        // Username is already masked by the backend API
                         nameEl.textContent = player.username || "User";
                         wagerEl.textContent = formatCurrency(player.wagerAmount);
                     } else {
@@ -199,12 +261,13 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     // Initial load immediately
+    updateSiteUI();
     updateLeaderboard();
 
     // Refresh every 12 seconds to avoid rate limiting
     // API allows 1 request every 10 seconds, so 12 seconds gives buffer
     // Always fetch fresh data with exact startTime/endTime - no caching
-    refreshInterval = setInterval(() => {
-        updateLeaderboard();
-    }, 12000); // 12 seconds to avoid rate limit (API: 1 req per 10 sec)
+    if (!leaderboardEnded || currentSite !== "shuffle") {
+        startRefresh();
+    }
 });
