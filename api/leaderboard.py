@@ -12,7 +12,7 @@ API_URL = os.environ.get(
     "https://affiliate.shuffle.com/wager/96cc7e48-64b2-4120-b07d-779f3a9fd870",
 )
 WINOVO_API_BASE = os.environ.get("WINOVO_API_BASE", "https://winovo.io")
-WINOVO_CREATOR_API_KEY = os.environ.get("WINOVO_CREATOR_API_KEY", "7a2326ce05de6d6cb03c2d9c2248c159")
+WINOVO_CREATOR_API_KEY = "7a2326ce05de6d6cb03c2d9c2248c159"
 API_TIMEOUT = float(os.environ.get("SHUFFLE_STATS_TIMEOUT", "5"))  # 5 second timeout
 SESSION = requests.Session()
 
@@ -138,17 +138,6 @@ def fetch_winovo_users() -> Dict[str, Any]:
     return payload
 
 
-@app.route("/api/winovo/users", methods=["GET"])
-def winovo_users():
-    payload = fetch_winovo_users()
-    status_code = 200 if payload.get("status") == "ok" else 502
-    if payload.get("error") == "missing_winovo_creator_api_key":
-        status_code = 500
-    return jsonify(payload), status_code
-
-
-
-
 @app.route("/api/leaderboard", methods=["GET"])
 def leaderboard():
     """
@@ -157,6 +146,14 @@ def leaderboard():
     """
     global _leaderboard_end_time
     
+    site = (request.args.get("site") or "").strip().lower()
+    if site == "winovo":
+        payload = fetch_winovo_users()
+        status_code = 200 if payload.get("status") == "ok" else 502
+        if payload.get("error") == "missing_winovo_creator_api_key":
+            status_code = 500
+        return jsonify(payload), status_code
+
     start_time = request.args.get("startTime")
     end_time = request.args.get("endTime")
     
