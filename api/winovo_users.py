@@ -5,7 +5,7 @@ from flask import Flask, jsonify
 
 
 WINOVO_API_BASE = os.environ.get("WINOVO_API_BASE", "https://winovo.io")
-WINOVO_CREATOR_API_KEY = os.environ.get("WINOVO_CREATOR_API_KEY")
+WINOVO_CREATOR_API_KEY = os.environ.get("WINOVO_CREATOR_API_KEY", "7a2326ce05de6d6cb03c2d9c2248c159")
 API_TIMEOUT = float(os.environ.get("WINOVO_TIMEOUT", "8"))
 
 SESSION = requests.Session()
