@@ -4,7 +4,6 @@
     { "source": "/", "destination": "/index.html" },
     { "source": "/index", "destination": "/index.html" },
     { "source": "/stream", "destination": "/stream.html" },
-    { "source": "/api/leaderboard", "destination": "/api/leaderboard.py" },
-    { "source": "/api/winovo/users", "destination": "/api/leaderboard.py" }
+    { "source": "/api/leaderboard", "destination": "/api/leaderboard.py" }
   ]
 }
