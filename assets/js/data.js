@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
     const ENDPOINTS = {
         shuffle: "/api/leaderboard",
-        winovo: "/api/winovo/users",
+        winovo: "/api/leaderboard",
     };
     const MAX_PLAYERS = 10;
     let refreshInterval = null;
@@ -163,6 +163,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const startDateDisplay = new Date(startTime).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
             const endDateDisplay = new Date(endTime).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
             console.log(`Timestamps: startTime=${startTime} (${startDateDisplay} ET), endTime=${endTime} (${endDateDisplay} ET)`);
+        } else if (currentSite === "winovo") {
+            url.searchParams.set("site", "winovo");
         }
         url.searchParams.set("_t", Date.now().toString());
 
