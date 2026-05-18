@@ -831,6 +831,31 @@ body {
   color: var(--roo-color) !important;
 }
 
+.lb-switch {
+  gap: 8px;
+}
+
+.lb-switch-mobile {
+  display: flex;
+  gap: 8px;
+}
+
+.lb-tab {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 6px 12px;
+  line-height: 1;
+}
+
+.lb-tab::after {
+  display: none;
+}
+
+.lb-tab.active {
+  background: rgba(187, 163, 255, 0.18);
+  border-color: var(--roo-color);
+}
+
 a {
   text-decoration: none;
 }
