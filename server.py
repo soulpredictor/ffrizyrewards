@@ -9,6 +9,8 @@ API_URL = os.environ.get(
     "SHUFFLE_STATS_URL",
     "https://affiliate.shuffle.com/wager/96cc7e48-64b2-4120-b07d-779f3a9fd870",
 )
+WINOVO_API_BASE = os.environ.get("WINOVO_API_BASE", "https://winovo.io")
+WINOVO_CREATOR_API_KEY = os.environ.get("WINOVO_CREATOR_API_KEY", "7a2326ce05de6d6cb03c2d9c2248c159")
 API_TIMEOUT = float(os.environ.get("SHUFFLE_STATS_TIMEOUT", "8"))
 SESSION = requests.Session()
 
@@ -59,7 +61,29 @@ def leaderboard():
     return jsonify(simplified)
 
 
+@app.route("/api/winovo/users", methods=["GET"])
+def winovo_users():
+    if not WINOVO_CREATOR_API_KEY:
+        abort(500, description="WINOVO_CREATOR_API_KEY is not set")
+
+    url = f"{WINOVO_API_BASE}/api/creator/users"
+    try:
+        upstream = SESSION.get(
+            url,
+            timeout=API_TIMEOUT,
+            headers={"x-creator-auth": WINOVO_CREATOR_API_KEY},
+        )
+        upstream.raise_for_status()
+        payload = upstream.json()
+    except requests.RequestException as exc:
+        app.logger.error("Failed to fetch Winovo leaderboard: %s", exc, exc_info=True)
+        abort(502, description="Unable to reach Winovo leaderboard API")
+    except ValueError:
+        abort(502, description="Invalid response from Winovo leaderboard API")
+
+    return jsonify(payload)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
     app.run(host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG") == "1")
-
