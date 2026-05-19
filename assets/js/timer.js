@@ -19,11 +19,15 @@
         if (!el) return;
 
         const now = Date.now();
-        const difference = targetDate - now;
+        let difference = targetDate - now;
 
         if (difference <= 0) {
-            el.textContent = "00D 00H 00M 00S";
-            return;
+            resetTarget();
+            difference = targetDate - now;
+            if (difference <= 0) {
+                el.textContent = "00D 00H 00M 00S";
+                return;
+            }
         }
 
         const days = Math.floor(difference / 86400000);
