@@ -83,7 +83,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (descEl) {
             descEl.textContent = isWinovo
-                ? "based on their total wagered amount for the current week (Mon–Sat ET)."
+                ? "based on their total wagered amount for the current week (Mon–Sun ET)."
                 : "based on their total wagered amount for the current month.";
         }
         if (rangeEl) {
