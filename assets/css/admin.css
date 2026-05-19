@@ -1,6 +1,6 @@
 .admin-body {
   min-height: 100vh;
-  background: #0a0618;
+  color-scheme: dark;
 }
 
 .admin-main {
@@ -10,12 +10,29 @@
 }
 
 .admin-card {
-  background: rgba(18, 12, 36, 0.82);
-  border: 1px solid rgba(187, 163, 255, 0.2);
-  border-radius: 16px;
-  padding: 1.5rem;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(12px);
+  border-radius: 28px;
+  padding: 34px 28px 30px;
+  background: linear-gradient(160deg, rgba(8, 8, 20, 0.96) 0%, rgba(8, 8, 20, 0.85) 45%, rgba(255, 255, 255, 0.06) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-card::before {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.35), transparent 60%);
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.admin-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .admin-badge {
@@ -31,9 +48,32 @@
   color: #fff !important;
 }
 
+.admin-input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.admin-input option {
+  background-color: #0b0a1d;
+  color: #fff;
+}
+
+.admin-input::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.2);
+  opacity: 0.8;
+}
+
+.admin-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
 .admin-input:focus {
   border-color: #bba3ff !important;
   box-shadow: 0 0 0 0.2rem rgba(187, 163, 255, 0.2);
+}
+
+.admin-body ::selection {
+  background: rgba(127, 103, 255, 0.35);
+  color: #fff;
 }
 
 .admin-table tbody tr {
