@@ -31,14 +31,14 @@
 
     /** UTC instant when local ET wall-clock is y-m-d H:M:S */
     function easternToUtc(year, month, day, hour, minute, second) {
-        let guess = Date.UTC(year, month, day, hour + 5, minute, second);
-        for (let i = 0; i < 3; i++) {
+        const targetUtc = Date.UTC(year, month, day, hour, minute, second);
+        let guess = targetUtc;
+        for (let i = 0; i < 6; i++) {
             const p = easternParts(new Date(guess));
-            const diffHours = hour - p.hour;
-            const diffDays = day - p.day;
-            const adjustMs = (diffDays * 24 + diffHours) * 3600000;
-            if (adjustMs === 0) break;
-            guess += adjustMs;
+            const easternAsUtc = Date.UTC(p.year, p.month, p.day, p.hour, p.minute, p.second);
+            const diff = targetUtc - easternAsUtc;
+            if (diff === 0) break;
+            guess += diff;
         }
         return guess;
     }
