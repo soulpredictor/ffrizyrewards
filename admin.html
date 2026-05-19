@@ -14,6 +14,7 @@
 <body class="admin-body">
   <div class="blob yellow"></div>
   <div class="blob blue"></div>
+  <div class="logo-bg" id="logo-bg"></div>
 
   <header class="header p-3 scrolled">
     <div class="container d-flex justify-content-between align-items-center">
@@ -105,6 +106,35 @@
 
   <script>
     window.__BACKEND_BASE__ = "https://pterodactyl2.soulpredictor.xyz";
+  </script>
+  <script>
+    const logoContainer = document.getElementById("logo-bg");
+    const logoSrc = "assets/img/ffrizy_logo.png";
+    const rows = 4;
+    const cols = 5;
+    const cellPadding = 100;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const img = document.createElement("img");
+        img.src = logoSrc;
+
+        const size = Math.floor(Math.random() * 110) + 60;
+        img.style.width = `${size}px`;
+
+        const top = r * 20 + Math.random() * 5;
+        const left = c * 20 + Math.random() * 5;
+        img.style.top = `${top}%`;
+        img.style.left = `${left}%`;
+
+        img.style.opacity = (Math.random() * 0.03 + 0.02).toFixed(3);
+        img.style.position = "absolute";
+        img.style.filter = "grayscale(100%)";
+        img.style.userSelect = "none";
+
+        logoContainer.appendChild(img);
+      }
+    }
   </script>
   <script src="assets/js/admin.js"></script>
 </body>
