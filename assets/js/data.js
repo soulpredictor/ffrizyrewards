@@ -1,99 +1,44 @@
 document.addEventListener("DOMContentLoaded", () => {
+    const backendBase = (window.__BACKEND_BASE__ || "").toString().replace(/\/+$/, "");
+    const apiOrigin = backendBase || window.location.origin;
     const ENDPOINTS = {
         shuffle: "/api/leaderboard",
         winovo: "/api/leaderboard",
     };
     const MAX_PLAYERS = 10;
+    const PRIZES = {
+        shuffle: [1500, 750, 375, 225, 150, 20, 20, 20, 20, 20],
+        winovo: [376, 188, 93, 56, 37, 0, 0, 0, 0, 0],
+    };
+
     let refreshInterval = null;
     let leaderboardEnded = false;
     let currentSite = localStorage.getItem("leaderboardSite") || "shuffle";
+    const P = window.LeaderboardPeriods;
 
-    // Helper to create Date from Eastern time components
-    function createEasternDate(year, month, day, hour, minute, second) {
-        // Eastern is UTC-5 (EST) or UTC-4 (EDT)
-        // Rough DST check: March (2) to November (10)
-        const isDST = month >= 2 && month <= 10;
-        const offsetHours = isDST ? 4 : 5;
-        
-        // If we want hour:minute:second Eastern, add offset to get UTC
-        return new Date(Date.UTC(year, month, day, hour + offsetHours, minute, second));
-    }
-    
-    // Calculate current month start and end in Eastern Time
-    function getMonthStartEastern() {
-        const now = new Date();
-        const formatter = new Intl.DateTimeFormat('en', {
-            timeZone: 'America/New_York',
-            year: 'numeric',
-            month: 'numeric'
-        });
-        const parts = formatter.formatToParts(now);
-        const year = parseInt(parts.find(p => p.type === 'year').value);
-        const month = parseInt(parts.find(p => p.type === 'month').value) - 1;
-        
-        // First day of month at 00:00:00 Eastern
-        return createEasternDate(year, month, 1, 0, 0, 0);
-    }
-    
-    function getMonthEndEastern() {
-        const now = new Date();
-        const formatter = new Intl.DateTimeFormat('en', {
-            timeZone: 'America/New_York',
-            year: 'numeric',
-            month: 'numeric'
-        });
-        const parts = formatter.formatToParts(now);
-        const year = parseInt(parts.find(p => p.type === 'year').value);
-        const month = parseInt(parts.find(p => p.type === 'month').value) - 1;
-        
-        // Last day of current month at 23:59:59 Eastern
-        const lastDay = new Date(year, month + 1, 0).getDate();
-        return createEasternDate(year, month, lastDay, 23, 59, 59);
-    }
-
-    // Get URL parameters to check if viewing a specific day
     const urlParams = new URLSearchParams(window.location.search);
-    const dayParam = urlParams.get('day');
+    const dayParam = urlParams.get("day");
 
-    // Default: Current month in Eastern time (from 1st of month to last day of month)
-    const monthStart = getMonthStartEastern();
-    const monthEnd = getMonthEndEastern();
-    const defaultStartTime = monthStart.getTime();
-    const defaultEndTime = monthEnd.getTime();
-    
-    const startDateStr = monthStart.toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
-    const endDateStr = monthEnd.toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
-    console.log(`Using monthly leaderboard: ${startDateStr} to ${endDateStr} (Eastern Time)`);
-    console.log(`Timestamps: startTime=${defaultStartTime}, endTime=${defaultEndTime}`);
+    let shuffleBounds = P.getPeriodBounds("shuffle");
+    let winovoBounds = P.getPeriodBounds("winovo");
+    let startTime = shuffleBounds.start;
+    let endTime = shuffleBounds.end;
 
-    // If day parameter is provided, show data for that specific day
-    let startTime, endTime;
-    if (dayParam) {
-        const day = parseInt(dayParam);
-        const formatter = new Intl.DateTimeFormat('en', {
-            timeZone: 'America/New_York',
-            year: 'numeric',
-            month: 'numeric'
+    if (dayParam && currentSite === "shuffle") {
+        const day = parseInt(dayParam, 10);
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat("en", {
+            timeZone: P.ET,
+            year: "numeric",
+            month: "numeric",
         });
-        const parts = formatter.formatToParts(new Date());
-        const year = parseInt(parts.find(p => p.type === 'year').value);
-        const month = parseInt(parts.find(p => p.type === 'month').value) - 1;
-        
+        const parts = formatter.formatToParts(now);
+        const year = parseInt(parts.find((p) => p.type === "year").value, 10);
+        const month = parseInt(parts.find((p) => p.type === "month").value, 10) - 1;
         if (day >= 1 && day <= 31) {
-            // Show data for specific day in current month
-            const dayStart = createEasternDate(year, month, day, 0, 0, 0);
-            const dayEnd = createEasternDate(year, month, day, 23, 59, 59);
-            startTime = dayStart.getTime();
-            endTime = dayEnd.getTime();
-            console.log(`Showing wagers for day ${day} of current month`);
-        } else {
-            startTime = defaultStartTime;
-            endTime = defaultEndTime;
+            startTime = P.easternToUtc(year, month, day, 0, 0, 0);
+            endTime = P.easternToUtc(year, month, day, 23, 59, 59);
         }
-    } else {
-        // Default: Current month (from 1st to last day)
-        startTime = defaultStartTime;
-        endTime = defaultEndTime;
     }
 
     const formatCurrency = (value) => {
@@ -104,30 +49,77 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     };
 
-    const updateSiteUI = () => {
-        const tabs = document.querySelectorAll("[data-leaderboard-site]");
-        tabs.forEach((el) => {
-            const site = el.getAttribute("data-leaderboard-site");
-            if (site === currentSite) {
-                el.classList.add("active");
+    const updatePrizes = () => {
+        const prizes = PRIZES[currentSite] || PRIZES.shuffle;
+        const prizeEls = document.querySelectorAll("[data-prize-rank]");
+        prizeEls.forEach((el) => {
+            const rank = parseInt(el.getAttribute("data-prize-rank"), 10) - 1;
+            const amount = prizes[rank];
+            if (amount > 0) {
+                el.innerHTML = `<i class="fa-solid fa-dollar-sign"></i>${amount.toLocaleString("en-US")}`;
+                el.closest("tr, .lead-card, .podium-card")?.classList.remove("prize-hidden");
             } else {
-                el.classList.remove("active");
+                el.textContent = "—";
+                el.closest("tr")?.classList.add("prize-hidden");
             }
+        });
+
+        const total = prizes.slice(0, 5).reduce((a, b) => a + b, 0);
+        const totalEl = document.getElementById("prizePoolTotal");
+        if (totalEl) {
+            totalEl.textContent = `$${total.toLocaleString("en-US")}`;
+        }
+    };
+
+    const updateHeroCopy = () => {
+        const titlePeriod = document.getElementById("leaderboardPeriodLabel");
+        const descEl = document.getElementById("leaderboardDescription");
+        const rangeEl = document.getElementById("leaderboardPeriodRange");
+
+        const isWinovo = currentSite === "winovo";
+        if (titlePeriod) {
+            titlePeriod.textContent = isWinovo ? "Weekly" : "Monthly";
+        }
+        if (descEl) {
+            descEl.textContent = isWinovo
+                ? "based on their total wagered amount for the current week (Mon–Sat ET)."
+                : "based on their total wagered amount for the current month.";
+        }
+        if (rangeEl) {
+            const bounds = isWinovo ? winovoBounds : shuffleBounds;
+            rangeEl.textContent = P.formatEasternRange(bounds.start, bounds.end);
+        }
+    };
+
+    const updateSiteUI = () => {
+        document.querySelectorAll("[data-leaderboard-site]").forEach((el) => {
+            const site = el.getAttribute("data-leaderboard-site");
+            const active = site === currentSite;
+            el.classList.toggle("active", active);
+            el.setAttribute("aria-selected", active ? "true" : "false");
         });
 
         const labelEl = document.getElementById("leaderboardSiteLabel");
         if (labelEl) {
             labelEl.textContent = currentSite === "winovo" ? "Winovo" : "Shuffle";
         }
+
+        const playBtn = document.querySelector(".play-now-btn a, #navbarNav .btn-custom");
+        if (playBtn) {
+            playBtn.href =
+                currentSite === "winovo"
+                    ? "https://winovo.io/?ref=ffrizy"
+                    : "https://shuffle.com/?r=ffrizy";
+        }
+
+        updatePrizes();
+        updateHeroCopy();
+        window.dispatchEvent(new CustomEvent("leaderboardSiteChanged", { detail: { site: currentSite } }));
     };
 
     const startRefresh = () => {
-        if (refreshInterval) {
-            return;
-        }
-        refreshInterval = setInterval(() => {
-            updateLeaderboard();
-        }, 12000);
+        if (refreshInterval) return;
+        refreshInterval = setInterval(updateLeaderboard, 12000);
     };
 
     const stopRefresh = () => {
@@ -141,44 +133,43 @@ document.addEventListener("DOMContentLoaded", () => {
         el.addEventListener("click", (e) => {
             e.preventDefault();
             const next = el.getAttribute("data-leaderboard-site");
-            if (!next || next === currentSite) {
-                return;
-            }
+            if (!next || next === currentSite) return;
+
             currentSite = next;
             localStorage.setItem("leaderboardSite", currentSite);
-            updateSiteUI();
-            if (currentSite === "winovo") {
-                leaderboardEnded = false;
-                startRefresh();
+            leaderboardEnded = false;
+
+            if (currentSite === "shuffle") {
+                shuffleBounds = P.getPeriodBounds("shuffle");
+                startTime = shuffleBounds.start;
+                endTime = shuffleBounds.end;
+            } else {
+                winovoBounds = P.getPeriodBounds("winovo");
             }
+
+            updateSiteUI();
+            startRefresh();
             updateLeaderboard();
         });
     });
 
     const updateLeaderboard = () => {
-        const url = new URL(ENDPOINTS[currentSite] || ENDPOINTS.shuffle, window.location.origin);
+        const url = new URL(ENDPOINTS[currentSite] || ENDPOINTS.shuffle, apiOrigin);
+
         if (currentSite === "shuffle") {
             url.searchParams.set("startTime", startTime.toString());
             url.searchParams.set("endTime", endTime.toString());
-            const startDateDisplay = new Date(startTime).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
-            const endDateDisplay = new Date(endTime).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric" });
-            console.log(`Timestamps: startTime=${startTime} (${startDateDisplay} ET), endTime=${endTime} (${endDateDisplay} ET)`);
-        } else if (currentSite === "winovo") {
+        } else {
             url.searchParams.set("site", "winovo");
         }
         url.searchParams.set("_t", Date.now().toString());
 
-        console.log(`[${new Date().toLocaleTimeString()}] Fetching fresh leaderboard data (${currentSite})`);
-        console.log(`URL: ${url.toString()}`);
-
-        // Fetch with no cache for fresh data - always get latest
-        fetch(url, { 
+        fetch(url, {
             cache: "no-store",
             headers: {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            }
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                Pragma: "no-cache",
+            },
         })
             .then((response) => {
                 if (!response.ok) {
@@ -188,6 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
             })
             .then((response) => {
                 let normalized = [];
+
                 if (currentSite === "shuffle") {
                     let data;
                     if (Array.isArray(response)) {
@@ -199,7 +191,6 @@ document.addEventListener("DOMContentLoaded", () => {
                             stopRefresh();
                         }
                     } else {
-                        console.error("Unexpected API response shape:", response);
                         data = [];
                     }
                     normalized = data
@@ -211,47 +202,32 @@ document.addEventListener("DOMContentLoaded", () => {
                 } else {
                     const data = response && Array.isArray(response.data) ? response.data : [];
                     normalized = data.map((entry) => ({
-                        username: entry?.name || "User",
-                        wagerAmount: Number(entry?.wagered) || 0,
+                        username: entry?.username || entry?.name || "User",
+                        wagerAmount: Number(entry?.wagerAmount ?? entry?.wagered) || 0,
                     }));
+                    if (response.period?.endTime) {
+                        winovoBounds = {
+                            start: response.period.startTime,
+                            end: response.period.endTime,
+                            label: "weekly",
+                        };
+                        updateHeroCopy();
+                    }
                 }
 
-                console.log(`✅ API returned ${normalized.length} entries (${currentSite})`);
-                
-                // Sort and display data (include entries with 0 wagerAmount too)
-                // Always show latest data - no caching
                 const sorted = normalized
                     .sort((a, b) => b.wagerAmount - a.wagerAmount)
                     .slice(0, MAX_PLAYERS);
-                
-                console.log(`📊 Displaying ${sorted.length} players (sorted by wagerAmount, latest data only)`);
-                
-                // Log if no data
-                if (sorted.length === 0) {
-                    console.warn("⚠️ No leaderboard data available. Possible reasons:");
-                    console.warn("1. No wagers in current month period");
-                    console.warn("2. API rate limit (waiting 12+ seconds between requests)");
-                    console.warn("3. No referees found");
-                    console.warn("4. API temporarily unavailable");
-                } else {
-                    console.log(`✅ Successfully displaying ${sorted.length} players with latest wager data`);
-                }
 
-                // Update all player slots (fill with empty if no data)
                 for (let index = 0; index < MAX_PLAYERS; index++) {
                     const nameEl = document.getElementById(`user${index}_name`);
                     const wagerEl = document.getElementById(`user${index}_wager`);
-
-                    if (!nameEl || !wagerEl) {
-                        continue;
-                    }
+                    if (!nameEl || !wagerEl) continue;
 
                     if (index < sorted.length && sorted[index]) {
-                        const player = sorted[index];
-                        nameEl.textContent = player.username || "User";
-                        wagerEl.textContent = formatCurrency(player.wagerAmount);
+                        nameEl.textContent = sorted[index].username || "User";
+                        wagerEl.textContent = formatCurrency(sorted[index].wagerAmount);
                     } else {
-                        // Show placeholder if no data for this rank
                         nameEl.textContent = "----";
                         wagerEl.textContent = "----";
                     }
@@ -262,13 +238,8 @@ document.addEventListener("DOMContentLoaded", () => {
             });
     };
 
-    // Initial load immediately
     updateSiteUI();
     updateLeaderboard();
-
-    // Refresh every 12 seconds to avoid rate limiting
-    // API allows 1 request every 10 seconds, so 12 seconds gives buffer
-    // Always fetch fresh data with exact startTime/endTime - no caching
     if (!leaderboardEnded || currentSite !== "shuffle") {
         startRefresh();
     }
