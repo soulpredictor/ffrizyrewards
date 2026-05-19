@@ -1,6 +1,6 @@
 /**
  * Eastern-time period helpers for Shuffle (monthly) and Winovo (weekly).
- * Winovo week: Monday 00:00 ET → Sunday 00:00 ET (exclusive end).
+ * Winovo week: Monday 00:00 ET → next Monday 00:00 ET (exclusive end).
  */
 (function (global) {
     const ET = "America/New_York";
@@ -61,7 +61,15 @@
         const mondayUtc = noonUtc - daysFromMonday * 86400000;
         const mp = easternParts(new Date(mondayUtc));
         const start = easternToUtc(mp.year, mp.month, mp.day, 0, 0, 0);
-        const end = start + 6 * 86400000;
+        const nextMondayEtDate = new Date(Date.UTC(mp.year, mp.month, mp.day + 7));
+        const end = easternToUtc(
+            nextMondayEtDate.getUTCFullYear(),
+            nextMondayEtDate.getUTCMonth(),
+            nextMondayEtDate.getUTCDate(),
+            0,
+            0,
+            0,
+        );
         return { start, end, label: "weekly" };
     }
 
