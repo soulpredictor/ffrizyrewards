@@ -12,6 +12,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     let refreshInterval = null;
+    let rolloverTimeout = null;
     let leaderboardEnded = false;
     let currentSite = localStorage.getItem("leaderboardSite") || "shuffle";
     const P = window.LeaderboardPeriods;
@@ -138,6 +139,10 @@ document.addEventListener("DOMContentLoaded", () => {
             currentSite = next;
             localStorage.setItem("leaderboardSite", currentSite);
             leaderboardEnded = false;
+            if (rolloverTimeout) {
+                clearTimeout(rolloverTimeout);
+                rolloverTimeout = null;
+            }
 
             if (currentSite === "shuffle") {
                 shuffleBounds = P.getPeriodBounds("shuffle");
@@ -186,9 +191,31 @@ document.addEventListener("DOMContentLoaded", () => {
                         data = response;
                     } else if (response.data && Array.isArray(response.data)) {
                         data = response.data;
+                        if (response.period?.startTime && response.period?.endTime) {
+                            shuffleBounds = {
+                                start: response.period.startTime,
+                                end: response.period.endTime,
+                                label: "monthly",
+                            };
+                            startTime = shuffleBounds.start;
+                            endTime = shuffleBounds.end;
+                            updateHeroCopy();
+                        }
                         if (response.ended) {
                             leaderboardEnded = true;
                             stopRefresh();
+                            if (rolloverTimeout) clearTimeout(rolloverTimeout);
+                            const nextStart = (response.period?.endTime || endTime) + 1000;
+                            const delay = Math.max(1000, nextStart - Date.now());
+                            rolloverTimeout = setTimeout(() => {
+                                leaderboardEnded = false;
+                                shuffleBounds = P.getPeriodBounds("shuffle");
+                                startTime = shuffleBounds.start;
+                                endTime = shuffleBounds.end;
+                                updateHeroCopy();
+                                startRefresh();
+                                updateLeaderboard();
+                            }, delay);
                         }
                     } else {
                         data = [];
