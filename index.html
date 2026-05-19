@@ -143,9 +143,13 @@
         <a href="stream.html" class="nav-link">Stream</a>
         <a href="https://discord.gg/invite/u5MTGkakzd" target="_blank" class="nav-link">Support</a>
       </nav>
-      <div class="lb-switch d-none d-md-flex align-items-center">
-        <a href="#" class="nav-link lb-tab active" data-leaderboard-site="shuffle">Shuffle</a>
-        <a href="#" class="nav-link lb-tab" data-leaderboard-site="winovo">Winovo</a>
+      <div class="lb-switch d-none d-md-flex align-items-center" role="tablist" aria-label="Leaderboard source">
+        <a href="#" class="nav-link lb-tab active" role="tab" data-leaderboard-site="shuffle" aria-selected="true">
+          <span class="lb-tab-dot lb-tab-dot--shuffle"></span>Shuffle
+        </a>
+        <a href="#" class="nav-link lb-tab" role="tab" data-leaderboard-site="winovo" aria-selected="false">
+          <span class="lb-tab-dot lb-tab-dot--winovo"></span>Winovo
+        </a>
       </div>
 
       <button class="btn play-now-btn d-none d-lg-inline-block" style="padding: 10px">
@@ -165,8 +169,12 @@
           <a href="stream.html" class="nav-link">Stream</a>
           <a href="https://discord.gg/invite/u5MTGkakzd" target="_blank" class="nav-link">Support</a>
           <div class="lb-switch lb-switch-mobile mt-2">
-            <a href="#" class="nav-link lb-tab active" data-leaderboard-site="shuffle">Shuffle</a>
-            <a href="#" class="nav-link lb-tab" data-leaderboard-site="winovo">Winovo</a>
+            <a href="#" class="nav-link lb-tab active" role="tab" data-leaderboard-site="shuffle" aria-selected="true">
+              <span class="lb-tab-dot lb-tab-dot--shuffle"></span>Shuffle
+            </a>
+            <a href="#" class="nav-link lb-tab" role="tab" data-leaderboard-site="winovo" aria-selected="false">
+              <span class="lb-tab-dot lb-tab-dot--winovo"></span>Winovo
+            </a>
           </div>
           <a href="https://shuffle.com/?r=ffrizy" target="_blank" class="btn btn-custom mt-3">PLAY NOW</a>
         </nav>
@@ -181,12 +189,14 @@
           <!-- <img src="assets/img/stake.svg" class="mb-5" height="100" width="200" alt=""> -->
           <div class="col-12 col-md-8">
             <span class="jomhuria-font big-text text-white" style="line-height: 0.5"><span
-                style="color: #bba3ff">ffrizy</span> Monthly
+                style="color: #bba3ff">ffrizy</span> <span id="leaderboardPeriodLabel">Monthly</span>
               Leaderboard <span class="leaderboard-source">(<span id="leaderboardSiteLabel">Shuffle</span>)</span></span>
             <p class="text-white" style="margin-top: 5px; font-weight: 600;">
-              A total of $3000 is distributed across 5 users
+              A total of <span id="prizePoolTotal">$3,000</span> is distributed across the top 5 users
               <br />
-              based on their total wagered amount for the current month.
+              <span id="leaderboardDescription">based on their total wagered amount for the current month.</span>
+              <br />
+              <small class="text-white-50" id="leaderboardPeriodRange"></small>
             </p>
           </div>
         </div>
@@ -214,7 +224,7 @@
               <i class="fa-solid fa-dollar-sign"></i><span id="user1_wager">----</span>
             </div>
             <br />
-            <div class="prize prize-roo">
+            <div class="prize prize-roo" data-prize-rank="2">
               <i class="fa-solid fa-dollar-sign"></i>750
             </div>
           </div>
@@ -234,7 +244,7 @@
               <i class="fa-solid fa-dollar-sign"></i><span id="user0_wager">----</span>
             </div>
             <br />
-            <div class="prize prize-roo">
+            <div class="prize prize-roo" data-prize-rank="1">
               <i class="fa-solid fa-dollar-sign"></i>1500
             </div>
             </div>
@@ -257,7 +267,7 @@
               <i class="fa-solid fa-dollar-sign"></i><span id="user2_wager">----</span>
             </div>
             <br />
-            <div class="prize prize-roo">
+            <div class="prize prize-roo" data-prize-rank="3">
               <i class="fa-solid fa-dollar-sign"></i>375
             </div>
           </div>
@@ -306,7 +316,7 @@
                   </div>
                 </td>
                 <td>
-                  <div class="deals__text deals__text--buy">
+                  <div class="deals__text deals__text--buy" data-prize-rank="4">
                     <i class="fa-solid fa-dollar-sign"></i>225
                   </div>
                 </td>
@@ -326,7 +336,7 @@
                   </div>
                 </td>
                 <td>
-                  <div class="deals__text deals__text--buy">
+                  <div class="deals__text deals__text--buy" data-prize-rank="5">
                     <i class="fa-solid fa-dollar-sign"></i>150
                   </div>
                 </td>
@@ -346,7 +356,7 @@
                   </div>
                 </td>
                 <td>
-                  <div class="deals__text deals__text--buy">
+                  <div class="deals__text deals__text--buy" data-prize-rank="6">
                     <i class="fa-solid fa-dollar-sign"></i>20
                   </div>
                 </td>
@@ -366,7 +376,7 @@
                   </div>
                 </td>
                 <td>
-                  <div class="deals__text deals__text--buy">
+                  <div class="deals__text deals__text--buy" data-prize-rank="7">
                     <i class="fa-solid fa-dollar-sign"></i>20
                   </div>
                 </td>
@@ -386,7 +396,7 @@
                   </div>
                 </td>
                 <td>
-                  <div class="deals__text deals__text--buy">
+                  <div class="deals__text deals__text--buy" data-prize-rank="8">
                     <i class="fa-solid fa-dollar-sign"></i>20
                   </div>
                 </td>
@@ -406,7 +416,7 @@
                   </div>
                 </td>
                 <td>
-                  <div class="deals__text deals__text--buy">
+                  <div class="deals__text deals__text--buy" data-prize-rank="9">
                     <i class="fa-solid fa-dollar-sign"></i>20
                   </div>
                 </td>
@@ -426,7 +436,7 @@
                   </div>
                 </td>
                 <td>
-                  <div class="deals__text deals__text--buy">
+                  <div class="deals__text deals__text--buy" data-prize-rank="10">
                     <i class="fa-solid fa-dollar-sign"></i>20
                   </div>
                 </td>
@@ -598,6 +608,10 @@
         logoContainer.appendChild(img);
       }
     }
+  </script>
+  <script src="assets/js/periods.js"></script>
+  <script>
+    window.__BACKEND_BASE__ = "https://pterodactyl2.soulpredictor.xyz";
   </script>
   <script src="assets/js/data.js"></script>
   <script src="assets/js/timer.js"></script>
