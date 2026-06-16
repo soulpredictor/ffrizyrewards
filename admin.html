@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="assets/img/favicon-32x32.png" sizes="32x32" />
+  <title>ffrizy Admin</title>
+  <link href="https://fonts.googleapis.com/css?family=Jomhuria:400|Inter:400,600,500,700|Mulish:600" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" />
+  <link rel="stylesheet" href="assets/css/styles.css" />
+  <link rel="stylesheet" href="assets/css/admin.css" />
+</head>
+<body class="admin-body">
+  <div class="blob yellow"></div>
+  <div class="blob blue"></div>
+  <div class="logo-bg" id="logo-bg"></div>
+
+  <header class="header p-3 scrolled">
+    <div class="container d-flex justify-content-between align-items-center">
+      <a href="index.html" class="jomhuria-font big-text-3 text-white">
+        <img src="assets/img/ffrizy_logo.png" alt="Logo" class="logo" />&nbsp; ffrizy <span class="admin-badge">Admin</span>
+      </a>
+      <nav class="d-flex gap-3 align-items-center">
+        <a href="index.html" class="nav-link">Leaderboard</a>
+        <button type="button" class="btn btn-sm btn-outline-light d-none" id="logoutBtn">Log out</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container admin-main">
+    <section id="loginSection" class="admin-card">
+      <h1 class="text-white mb-3">Admin sign in</h1>
+      <p class="text-white-50 mb-4">View historical wager snapshots for Shuffle and Packy.</p>
+      <form id="loginForm" class="admin-form">
+        <label class="form-label text-white" for="adminPassword">Password</label>
+        <input type="password" class="form-control admin-input" id="adminPassword" autocomplete="current-password" required />
+        <button type="submit" class="btn play-now-btn mt-3 w-100">Sign in</button>
+        <p class="text-danger mt-2 mb-0 d-none" id="loginError"></p>
+      </form>
+    </section>
+
+    <section id="dashboardSection" class="d-none">
+      <div class="admin-card mb-4">
+        <h1 class="text-white mb-2">Wager history</h1>
+        <p class="text-white-50 mb-0">Filter stored snapshots by site, user, date range, or period.</p>
+      </div>
+
+      <div class="admin-card mb-4">
+        <form id="filterForm" class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label text-white" for="filterSite">Site</label>
+            <select id="filterSite" class="form-select admin-input">
+              <option value="">All</option>
+              <option value="shuffle">Shuffle</option>
+              <option value="packy">Packy</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label text-white" for="filterUser">Username</label>
+            <input type="text" class="form-control admin-input" id="filterUser" placeholder="Partial match" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label text-white" for="filterFrom">From</label>
+            <input type="datetime-local" class="form-control admin-input" id="filterFrom" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label text-white" for="filterTo">To</label>
+            <input type="datetime-local" class="form-control admin-input" id="filterTo" />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label text-white" for="filterPeriod">Period key</label>
+            <select id="filterPeriod" class="form-select admin-input">
+              <option value="">Any period</option>
+            </select>
+          </div>
+          <div class="col-md-6 d-flex align-items-end gap-2">
+            <button type="submit" class="btn play-now-btn flex-grow-1">Search</button>
+            <button type="button" class="btn btn-outline-light" id="clearFilters">Clear</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="admin-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="text-white h5 mb-0">Results <span class="text-white-50" id="resultCount"></span></h2>
+          <span class="text-white-50 small" id="lastFetched"></span>
+        </div>
+        <div id="resultsEmpty" class="text-white-50 d-none">No snapshots match your filters.</div>
+        <div class="table-responsive">
+          <table class="deals__table admin-table" id="resultsTable">
+            <thead>
+              <tr>
+                <th>Captured</th>
+                <th>Site</th>
+                <th>Period</th>
+                <th>Top players</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    window.__BACKEND_BASE__ = "https://pterodactyl2.soulpredictor.xyz";
+  </script>
+  <script>
+    const logoContainer = document.getElementById("logo-bg");
+    const logoSrc = "assets/img/ffrizy_logo.png";
+    const rows = 4;
+    const cols = 5;
+    const cellPadding = 100;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const img = document.createElement("img");
+        img.src = logoSrc;
+
+        const size = Math.floor(Math.random() * 110) + 60;
+        img.style.width = `${size}px`;
+
+        const top = r * 20 + Math.random() * 5;
+        const left = c * 20 + Math.random() * 5;
+        img.style.top = `${top}%`;
+        img.style.left = `${left}%`;
+
+        img.style.opacity = (Math.random() * 0.03 + 0.02).toFixed(3);
+        img.style.position = "absolute";
+        img.style.filter = "grayscale(100%)";
+        img.style.userSelect = "none";
+
+        logoContainer.appendChild(img);
+      }
+    }
+  </script>
+  <script src="assets/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,247 @@
+﻿
+Affiliate Leaderboard & Stats API
+Documentation for Creator Partners
+Overview
+This API provides creator partners with two endpoints to access affiliate performance data for users referred through their codes.
+• Stats endpoint - a flexible, date-ranged top-30 leaderboard of users who used any of your referral codes, sorted by amount wagered (USD).
+• Leaderboard endpoint - your last 10 approved leaderboard events (upcoming, active, and ended) with prize tiers and the live top-30 entries for each.
+Both endpoints use the same API key authentication and are intended for external use (dashboards, widgets, embeds, etc.).
+Authentication
+Every request must include your unique API key in the request header. Your API key will be provided to you separately - do not share it with anyone.
+Header name:
+X-API-Key: your-api-key-here
+The base URL will be shared with you separately along with your API key. All examples below use {BASE_URL} as a placeholder.
+Endpoint 1 - Affiliate Stats
+GET  /v1/affiliate/stats
+Returns the top 30 users who used any of your referral codes, sorted by total amount wagered (USD) within the requested date range. Useful for arbitrary reporting periods (daily, weekly, monthly, custom).
+Query Parameters
+All parameters are required and must be included in the URL.
+Parameter
+Type
+Required
+Description
+start_date
+ISO 8601 date
+Yes
+Start of date range (e.g. 2026-01-01T00:00:00Z)
+end_date
+ISO 8601 date
+Yes
+End of date range (e.g. 2026-04-16T23:59:59Z)
+Example Request
+curl -X GET \
+  "{BASE_URL}/v1/affiliate/stats?start_date=2026-01-01T00:00:00Z&end_date=2026-04-16T23:59:59Z" \
+  -H "X-API-Key: your-api-key-here"
+Success Response (200 OK)
+{
+  "success": true,
+  "data": {
+    "leaderboard": [
+      {
+        "user_id": "abc123",
+        "username": "player1",
+        "image_url": "https://...",
+        "total_wagered_usd": "15000.50"
+      },
+      ...
+    ],
+    "start_date": "2026-01-01T00:00:00.000Z",
+    "end_date": "2026-04-16T23:59:59.000Z"
+  }
+}
+Response Fields
+Field
+Type
+Description
+success
+boolean
+Always true on success
+data.leaderboard
+array
+List of referred users (max 30)
+data.leaderboard[].user_id
+string
+Unique identifier of the referred user
+data.leaderboard[].username
+string | null
+Display name of the user
+data.leaderboard[].image_url
+string | null
+Profile picture URL
+data.leaderboard[].total_wagered_usd
+string
+Total amount wagered in USD
+data.start_date
+string
+Start of the requested date range (ISO 8601)
+data.end_date
+string
+End of the requested date range (ISO 8601)
+Endpoint 2 - Leaderboards
+GET  /v1/affiliate/leaderboard/external
+Returns up to 10 of your approved leaderboards (most recently created first), including upcoming, active, and ended events. Each leaderboard includes its prize tier configuration and the top-30 live entries. Designed for external widgets and embeds - gives you both the running event and recent recaps in one call.
+Entries are refreshed by a background job at most once every 5 minutes. Each leaderboard carries a next_update_at timestamp so clients can render an accurate countdown without polling aggressively.
+Query Parameters
+None.
+Example Request
+curl -X GET \
+  "{BASE_URL}/v1/affiliate/leaderboard/external" \
+  -H "X-API-Key: your-api-key-here"
+Success Response (200 OK)
+{
+  "success": true,
+  "data": {
+    "leaderboards": [
+      {
+        "id": "9b1f...-uuid",
+        "creator_user_id": "abc123",
+        "title": "April Showdown",
+        "affiliate_codes": ["MYCODE", "MYCODE2"],
+        "creator_prize_usd": "500.00",
+        "site_bonus_usd": "250.00",
+        "total_prize_usd": "750.00",
+        "is_sponsored": true,
+        "start_date": "2026-04-01T00:00:00.000Z",
+        "end_date":   "2026-04-30T00:00:00.000Z",
+        "created_at": "2026-03-25T14:12:03.000Z",
+        "approval_status": "approved",
+        "approved_at": "2026-03-26T09:00:00.000Z",
+        "rejection_reason": null,
+        "cancelled_at": null,
+        "refunded_at": null,
+        "refund_amount_usd": null,
+        "time_status": "active",
+        "prize_tiers": [
+          { "position": 1, "prize_amount_usd": "300.00" },
+          { "position": 2, "prize_amount_usd": "150.00" },
+          ...
+        ],
+        "entries": [
+          {
+            "rank": 1,
+            "user_id": "abc123",
+            "username": "player1",
+            "image_url": "https://...",
+            "total_wagered_usd": "15000.50"
+          },
+          ...
+        ],
+        "last_refreshed_at": "2026-04-15T12:35:00.000Z",
+        "next_update_at":    "2026-04-15T12:40:00.000Z",
+        "me": null
+      },
+      ...
+    ]
+  }
+}
+When you have no approved leaderboards yet, the response is { "success": true, "data": { "leaderboards": [] } } - no 404.
+Response Fields (per leaderboard)
+Field
+Type
+Description
+id
+string (uuid)
+Unique leaderboard identifier
+creator_user_id
+string
+Owning creator user ID (you)
+title
+string
+Display title (max 20 chars)
+affiliate_codes
+string[]
+Referral codes counted toward this leaderboard
+creator_prize_usd
+string
+Prize amount funded by you
+site_bonus_usd
+string
+Additional prize added by Packy.gg (sponsored events)
+total_prize_usd
+string
+creator_prize_usd + site_bonus_usd
+is_sponsored
+boolean
+true if site_bonus_usd > 0
+start_date
+string
+Event start (ISO 8601, top-of-hour UTC)
+end_date
+string
+Event end (ISO 8601, top-of-hour UTC)
+created_at
+string
+When the leaderboard was submitted
+approval_status
+enum
+Always "approved" on this endpoint
+approved_at
+string | null
+When admin approved the leaderboard
+time_status
+enum
+"upcoming" | "active" | "ended"
+prize_tiers
+array
+Position → prize mapping (top 10+ positions)
+entries
+array
+Live top-30 ranked entries (see below)
+entries[].rank
+number
+Position on the leaderboard (1-based)
+entries[].user_id
+string
+Referred user ID
+entries[].username
+string | null
+Display name
+entries[].image_url
+string | null
+Profile picture URL
+entries[].total_wagered_usd
+string
+Total amount wagered in USD within the event window
+last_refreshed_at
+string | null
+When entries were last refreshed; null while data is being prepared
+next_update_at
+string
+ISO timestamp of the next refresh tick (every 5 min)
+me
+null
+Always null on this endpoint (you are the owner, not a participant)
+When last_refreshed_at is null the entries array will be empty for that leaderboard - the event was just approved or the cache was flushed. The next refresh tick (next_update_at) will populate it; clients should display a "preparing standings" state. For ended events with no traffic this is also the expected state.
+Error Responses
+If something goes wrong, the API will return an error in this format:
+{
+  "statusCode": 401,
+  "error": "UNAUTHORIZED",
+  "message": "Invalid API key."
+}
+Common error codes:
+Status Code
+Meaning
+Common Cause
+401
+Unauthorized
+Missing or invalid API key
+403
+Forbidden
+Account does not have creator role, or is banned/locked
+422
+Validation Error
+Missing or invalid query parameters
+500
+Server Error
+Unexpected error - contact support
+Important Notes
+• Security: Keep your API key confidential. Do not share it publicly or commit it to source control.
+• Caching (Stats): Stats results are cached for up to 10 minutes. Repeated requests with the same date range within this window may return identical data.
+• Caching (Leaderboard entries): Entries are refreshed by a background job at most every 5 minutes. Use next_update_at to drive your countdown - there is no benefit to polling more frequently than this.
+• Limits: Stats returns at most 30 users. The leaderboard endpoint returns at most 10 leaderboards, each with at most 30 entries.
+• Currency: All monetary values are returned as strings in USD (e.g. "15000.50") to preserve precision.
+• Date format: Dates must be in ISO 8601 format (e.g. 2026-01-01T00:00:00Z). Leaderboard event windows are always aligned to the top of an hour in UTC.
+
+- Packy.gg -
+For support, contact support@packy.gg
