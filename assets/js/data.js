@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let leaderboardEnded = false;
     let currentSite = localStorage.getItem("leaderboardSite") || "shuffle";
     const P = window.LeaderboardPeriods;
+    const CACHE_PREFIX = "leaderboardCache:";
 
     const urlParams = new URLSearchParams(window.location.search);
     const dayParam = urlParams.get("day");
@@ -29,6 +30,31 @@ document.addEventListener("DOMContentLoaded", () => {
         currentSite = "packy";
         localStorage.setItem("leaderboardSite", currentSite);
     }
+
+    const cacheKey = (site) => `${CACHE_PREFIX}${site}`;
+
+    const readCache = (site) => {
+        try {
+            const raw = localStorage.getItem(cacheKey(site));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object") return null;
+            const players = Array.isArray(parsed.players) ? parsed.players : [];
+            const etag = typeof parsed.etag === "string" ? parsed.etag : "";
+            const dataHash = typeof parsed.dataHash === "string" ? parsed.dataHash : "";
+            const period = parsed.period && typeof parsed.period === "object" ? parsed.period : null;
+            const ended = Boolean(parsed.ended);
+            return { players, etag, dataHash, period, ended };
+        } catch {
+            return null;
+        }
+    };
+
+    const writeCache = (site, payload) => {
+        try {
+            localStorage.setItem(cacheKey(site), JSON.stringify(payload));
+        } catch {}
+    };
 
     if (dayParam && currentSite === "shuffle") {
         const day = parseInt(dayParam, 10);
@@ -135,6 +161,31 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
+    const renderPlayers = (players) => {
+        const sorted = (players || [])
+            .filter((p) => p && typeof p === "object")
+            .map((p) => ({
+                username: p.username || p.name || "User",
+                wagerAmount: Number(p.wagerAmount ?? p.wagered) || 0,
+            }))
+            .sort((a, b) => b.wagerAmount - a.wagerAmount)
+            .slice(0, MAX_PLAYERS);
+
+        for (let index = 0; index < MAX_PLAYERS; index++) {
+            const nameEl = document.getElementById(`user${index}_name`);
+            const wagerEl = document.getElementById(`user${index}_wager`);
+            if (!nameEl || !wagerEl) continue;
+
+            if (index < sorted.length && sorted[index]) {
+                nameEl.textContent = sorted[index].username || "User";
+                wagerEl.textContent = formatCurrency(sorted[index].wagerAmount);
+            } else {
+                nameEl.textContent = "----";
+                wagerEl.textContent = "----";
+            }
+        }
+    };
+
     document.querySelectorAll("[data-leaderboard-site]").forEach((el) => {
         el.addEventListener("click", (e) => {
             e.preventDefault();
@@ -157,13 +208,35 @@ document.addEventListener("DOMContentLoaded", () => {
                 packyBounds = P.getPeriodBounds("packy");
             }
 
+            const cached = readCache(currentSite);
+            if (cached?.players?.length) {
+                if (currentSite === "shuffle" && cached.period?.startTime && cached.period?.endTime) {
+                    shuffleBounds = {
+                        start: cached.period.startTime,
+                        end: cached.period.endTime,
+                        label: "monthly",
+                    };
+                    startTime = shuffleBounds.start;
+                    endTime = shuffleBounds.end;
+                }
+                if (currentSite === "packy" && cached.period?.startTime && cached.period?.endTime) {
+                    packyBounds = {
+                        start: cached.period.startTime,
+                        end: cached.period.endTime,
+                        label: "weekly",
+                    };
+                }
+                leaderboardEnded = Boolean(cached.ended);
+                renderPlayers(cached.players);
+            }
+
             updateSiteUI();
             startRefresh();
             updateLeaderboard();
         });
     });
 
-    const updateLeaderboard = () => {
+    const updateLeaderboard = async () => {
         const url = new URL(ENDPOINTS[currentSite] || ENDPOINTS.shuffle, apiOrigin);
 
         if (currentSite === "shuffle") {
@@ -174,101 +247,115 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         url.searchParams.set("_t", Date.now().toString());
 
-        fetch(url, {
-            cache: "no-store",
-            headers: {
+        try {
+            const cached = readCache(currentSite);
+            const headers = {
                 "Cache-Control": "no-cache, no-store, must-revalidate",
                 Pragma: "no-cache",
-            },
-        })
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error(`${currentSite} API responded with ${response.status}`);
-                }
-                return response.json();
-            })
-            .then((response) => {
-                let normalized = [];
+                ...(cached?.etag ? { "If-None-Match": cached.etag } : {}),
+            };
 
-                if (currentSite === "shuffle") {
-                    let data;
-                    if (Array.isArray(response)) {
-                        data = response;
-                    } else if (response.data && Array.isArray(response.data)) {
-                        data = response.data;
-                        if (response.period?.startTime && response.period?.endTime) {
-                            shuffleBounds = {
-                                start: response.period.startTime,
-                                end: response.period.endTime,
-                                label: "monthly",
-                            };
-                            startTime = shuffleBounds.start;
-                            endTime = shuffleBounds.end;
-                            updateHeroCopy();
-                        }
-                        if (response.ended) {
-                            leaderboardEnded = true;
-                            stopRefresh();
-                            if (rolloverTimeout) clearTimeout(rolloverTimeout);
-                            const nextStart = (response.period?.endTime || endTime) + 1000;
-                            const delay = Math.max(1000, nextStart - Date.now());
-                            rolloverTimeout = setTimeout(() => {
-                                leaderboardEnded = false;
-                                shuffleBounds = P.getPeriodBounds("shuffle");
-                                startTime = shuffleBounds.start;
-                                endTime = shuffleBounds.end;
-                                updateHeroCopy();
-                                startRefresh();
-                                updateLeaderboard();
-                            }, delay);
-                        }
-                    } else {
-                        data = [];
-                    }
-                    normalized = data
-                        .filter((player) => player && typeof player?.wagerAmount === "number")
-                        .map((player) => ({
-                            username: player.username || "User",
-                            wagerAmount: Number(player.wagerAmount) || 0,
-                        }));
-                } else {
-                    const data = response && Array.isArray(response.data) ? response.data : [];
-                    normalized = data.map((entry) => ({
-                        username: entry?.username || entry?.name || "User",
-                        wagerAmount: Number(entry?.wagerAmount ?? entry?.wagered) || 0,
-                    }));
-                    if (response.period?.endTime) {
-                        packyBounds = {
-                            start: response.period.startTime,
-                            end: response.period.endTime,
-                            label: "weekly",
-                        };
+            const res = await fetch(url, { cache: "no-store", headers });
+            if (res.status === 304) return;
+            if (!res.ok) throw new Error(`${currentSite} API responded with ${res.status}`);
+
+            const response = await res.json();
+            const etag = res.headers.get("ETag") || "";
+            const dataHash = (response && (response.data_hash || response.dataHash)) || "";
+
+            const nextKey = dataHash || etag;
+            const prevKey = cached?.dataHash || cached?.etag || "";
+            if (nextKey && prevKey && nextKey === prevKey) return;
+
+            if (currentSite === "shuffle") {
+                const data =
+                    response && Array.isArray(response.data)
+                        ? response.data
+                        : Array.isArray(response)
+                          ? response
+                          : [];
+
+                if (response?.period?.startTime && response?.period?.endTime) {
+                    shuffleBounds = {
+                        start: response.period.startTime,
+                        end: response.period.endTime,
+                        label: "monthly",
+                    };
+                    startTime = shuffleBounds.start;
+                    endTime = shuffleBounds.end;
+                    updateHeroCopy();
+                }
+
+                if (response?.ended) {
+                    leaderboardEnded = true;
+                    stopRefresh();
+                    if (rolloverTimeout) clearTimeout(rolloverTimeout);
+                    const nextStart = (response.period?.endTime || endTime) + 1000;
+                    const delay = Math.max(1000, nextStart - Date.now());
+                    rolloverTimeout = setTimeout(() => {
+                        leaderboardEnded = false;
+                        shuffleBounds = P.getPeriodBounds("shuffle");
+                        startTime = shuffleBounds.start;
+                        endTime = shuffleBounds.end;
                         updateHeroCopy();
-                    }
+                        startRefresh();
+                        updateLeaderboard();
+                    }, delay);
                 }
 
-                const sorted = normalized
-                    .sort((a, b) => b.wagerAmount - a.wagerAmount)
-                    .slice(0, MAX_PLAYERS);
-
-                for (let index = 0; index < MAX_PLAYERS; index++) {
-                    const nameEl = document.getElementById(`user${index}_name`);
-                    const wagerEl = document.getElementById(`user${index}_wager`);
-                    if (!nameEl || !wagerEl) continue;
-
-                    if (index < sorted.length && sorted[index]) {
-                        nameEl.textContent = sorted[index].username || "User";
-                        wagerEl.textContent = formatCurrency(sorted[index].wagerAmount);
-                    } else {
-                        nameEl.textContent = "----";
-                        wagerEl.textContent = "----";
-                    }
+                renderPlayers(data);
+                writeCache(currentSite, {
+                    players: data,
+                    etag,
+                    dataHash,
+                    period: response?.period || null,
+                    ended: Boolean(response?.ended),
+                });
+            } else {
+                const data = response && Array.isArray(response.data) ? response.data : [];
+                if (response?.period?.startTime && response?.period?.endTime) {
+                    packyBounds = {
+                        start: response.period.startTime,
+                        end: response.period.endTime,
+                        label: "weekly",
+                    };
+                    updateHeroCopy();
                 }
-            })
-            .catch((error) => {
-                console.error("Failed to load leaderboard data:", error);
-            });
+                renderPlayers(data);
+                writeCache(currentSite, {
+                    players: data,
+                    etag,
+                    dataHash,
+                    period: response?.period || null,
+                    ended: Boolean(response?.ended),
+                });
+            }
+        } catch (error) {
+            console.error("Failed to load leaderboard data:", error);
+        }
     };
+
+    const initialCache = readCache(currentSite);
+    if (initialCache?.players?.length) {
+        if (currentSite === "shuffle" && initialCache.period?.startTime && initialCache.period?.endTime) {
+            shuffleBounds = {
+                start: initialCache.period.startTime,
+                end: initialCache.period.endTime,
+                label: "monthly",
+            };
+            startTime = shuffleBounds.start;
+            endTime = shuffleBounds.end;
+        }
+        if (currentSite === "packy" && initialCache.period?.startTime && initialCache.period?.endTime) {
+            packyBounds = {
+                start: initialCache.period.startTime,
+                end: initialCache.period.endTime,
+                label: "weekly",
+            };
+        }
+        leaderboardEnded = Boolean(initialCache.ended);
+        renderPlayers(initialCache.players);
+    }
 
     updateSiteUI();
     updateLeaderboard();

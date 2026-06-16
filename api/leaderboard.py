@@ -1,5 +1,7 @@
 import os
 import threading
+import hashlib
+import json
 from datetime import datetime
 from typing import Optional, List, Any, Dict
 
@@ -8,6 +10,7 @@ from flask import Flask, jsonify, request
 
 from wager_store import (
     get_period_bounds,
+    query_snapshots,
     record_snapshot,
 )
 
@@ -16,7 +19,7 @@ API_URL = os.environ.get(
     "https://affiliate.shuffle.com/wager/96cc7e48-64b2-4120-b07d-779f3a9fd870",
 )
 PACKY_API_BASE = (os.environ.get("PACKY_API_BASE") or "https://packy.gg").rstrip("/")
-PACKY_API_KEY = os.environ.get("PACKY_API_KEY") or ""
+PACKY_API_KEY = os.environ.get("PACKY_API_KEY") or "64913ffff71d5c9c03a50d365dfe1e483b8e34e7b3f067f22f6e5d3bbe91a1d6"
 PACKY_CUSTOM_KEY = os.environ.get("PACKY_CUSTOM_KEY") or ""
 API_TIMEOUT = float(os.environ.get("SHUFFLE_STATS_TIMEOUT", "5"))
 SESSION = requests.Session()
@@ -34,6 +37,52 @@ def mask_username(username: str) -> str:
             return username
         return username[0] + "*" * (len(username) - 1)
     return username[:3] + "*" * (len(username) - 4) + username[-1]
+
+
+def _latest_snapshot_players(site: str, period_key: str) -> List[Dict[str, Any]]:
+    snapshots = query_snapshots(site=site, period_key=period_key, limit=25)
+    for snap in snapshots:
+        if not isinstance(snap, dict):
+            continue
+        players = snap.get("players")
+        if isinstance(players, list) and players:
+            return players
+
+    snapshots = query_snapshots(site=site, limit=25)
+    for snap in snapshots:
+        if not isinstance(snap, dict):
+            continue
+        players = snap.get("players")
+        if isinstance(players, list) and players:
+            return players
+    return []
+
+
+def _hash_response(period_key: str, ended: bool, players: List[Dict[str, Any]]) -> str:
+    normalized = []
+    for p in players or []:
+        if not isinstance(p, dict):
+            continue
+        username = (p.get("username") or "User")
+        try:
+            amt = round(float(p.get("wagerAmount", 0) or 0), 2)
+        except (TypeError, ValueError):
+            amt = 0.0
+        normalized.append({"username": str(username), "wagerAmount": amt})
+    normalized.sort(key=lambda x: (-x["wagerAmount"], x["username"]))
+    payload = {"periodKey": period_key, "ended": bool(ended), "data": normalized}
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _respond(payload: Dict[str, Any], etag: str):
+    inm = (request.headers.get("If-None-Match") or "").strip()
+    if inm and inm == etag:
+        return "", 304, {"ETag": etag, "Cache-Control": "no-store"}
+    resp = jsonify(payload)
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 def fetch_leaderboard_data(
@@ -190,12 +239,10 @@ def leaderboard():
     )
 
     if site == "packy":
+        stale = False
         payload = fetch_packy_leaderboards()
-        if payload.get("status") != "ok":
-            status_code = 500 if payload.get("error") == "missing_packy_api_key" else int(payload.get("statusCode") or 502)
-            return jsonify(payload), status_code
-
-        picked = _pick_packy_leaderboard(payload.get("data", []))
+        leaderboards = payload.get("data", []) if payload.get("status") == "ok" else []
+        picked = _pick_packy_leaderboard(leaderboards) if isinstance(leaderboards, list) else None
         entries = picked.get("entries", []) if isinstance(picked, dict) else []
         simplified: List[Dict[str, Any]] = []
         for entry in entries:
@@ -208,7 +255,23 @@ def leaderboard():
                 amount = 0.0
             simplified.append({"username": entry.get("username") or "User", "wagerAmount": amount})
 
-        record_snapshot("packy", simplified, period_start_dt, period_end_dt, period_key)
+        if not simplified:
+            fallback = _latest_snapshot_players("packy", period_key)
+            if fallback:
+                stale = True
+                simplified = [
+                    {
+                        "username": (p.get("username") or "User") if isinstance(p, dict) else "User",
+                        "wagerAmount": float(p.get("wagerAmount", 0) or 0) if isinstance(p, dict) else 0.0,
+                    }
+                    for p in fallback
+                ]
+
+        if simplified:
+            record_snapshot("packy", simplified, period_start_dt, period_end_dt, period_key)
+        elif payload.get("status") != "ok":
+            status_code = 500 if payload.get("error") == "missing_packy_api_key" else int(payload.get("statusCode") or 502)
+            return jsonify(payload), status_code
 
         end_ms = int(period_end_dt.timestamp() * 1000)
         start_ms = int(period_start_dt.timestamp() * 1000)
@@ -216,19 +279,22 @@ def leaderboard():
         if isinstance(picked, dict):
             ended = (picked.get("time_status") or "").strip().lower() == "ended"
         ended = ended or (datetime.utcnow().timestamp() * 1000 >= end_ms)
-        return jsonify(
-            {
-                "status": "ok",
-                "data": simplified,
-                "period": {
-                    "type": "weekly",
-                    "periodKey": period_key,
-                    "startTime": start_ms,
-                    "endTime": end_ms,
-                },
-                "ended": ended,
-            }
-        )
+        data_hash = _hash_response(period_key, ended, simplified)
+        etag = f'W/"{data_hash}"'
+        out = {
+            "status": "ok",
+            "data": simplified,
+            "period": {
+                "type": "weekly",
+                "periodKey": period_key,
+                "startTime": start_ms,
+                "endTime": end_ms,
+            },
+            "ended": ended,
+            "stale": stale,
+            "data_hash": data_hash,
+        }
+        return _respond(out, etag)
 
     start_time = request.args.get("startTime")
     end_time = request.args.get("endTime")
@@ -265,18 +331,38 @@ def leaderboard():
 
     record_snapshot("shuffle", raw_for_store, period_start_dt, period_end_dt, period_key)
 
-    return jsonify(
-        {
-            "data": simplified,
-            "ended": is_leaderboard_ended(),
-            "period": {
-                "type": "monthly",
-                "periodKey": period_key,
-                "startTime": int(period_start_dt.timestamp() * 1000),
-                "endTime": int(period_end_dt.timestamp() * 1000),
-            },
-        }
-    )
+    stale = False
+    if not simplified:
+        fallback = _latest_snapshot_players("shuffle", period_key)
+        if fallback:
+            stale = True
+            simplified = []
+            for p in fallback:
+                if not isinstance(p, dict):
+                    continue
+                username = p.get("username") or "User"
+                try:
+                    amt = float(p.get("wagerAmount", 0) or 0)
+                except (TypeError, ValueError):
+                    amt = 0.0
+                simplified.append({"username": mask_username(str(username)), "wagerAmount": amt, "weightedWagerAmount": amt})
+
+    ended = is_leaderboard_ended()
+    data_hash = _hash_response(period_key, ended, simplified)
+    etag = f'W/"{data_hash}"'
+    out = {
+        "data": simplified,
+        "ended": ended,
+        "period": {
+            "type": "monthly",
+            "periodKey": period_key,
+            "startTime": int(period_start_dt.timestamp() * 1000),
+            "endTime": int(period_end_dt.timestamp() * 1000),
+        },
+        "stale": stale,
+        "data_hash": data_hash,
+    }
+    return _respond(out, etag)
 
 
 @app.route("/api/packy/stats", methods=["GET"])
