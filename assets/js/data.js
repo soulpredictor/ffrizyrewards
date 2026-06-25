@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const MAX_PLAYERS = 10;
     const PRIZES = {
         shuffle: [1500, 750, 375, 225, 150, 20, 20, 20, 20, 20],
-        packy: [300, 150, 75, 45, 30, 0, 0, 0, 0, 0],
+        packy: [150, 75, 38, 22, 15, 0, 0, 0, 0, 0],
     };
 
     let refreshInterval = null;
