@@ -248,7 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const updateLeaderboard = async () => {
         const site = currentSite;
         const seq = (requestSeq[site] = (requestSeq[site] || 0) + 1);
-        if (inFlight[site]) inFlight[site].abort();
+        if (inFlight[site]) return;
         const controller = new AbortController();
         inFlight[site] = controller;
 
@@ -266,22 +266,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
         try {
             const cached = readCache(site);
-            const headers = {
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                Pragma: "no-cache",
-                ...(cached?.etag ? { "If-None-Match": cached.etag } : {}),
-            };
-
-            const res = await fetch(url, { cache: "no-store", headers, signal: controller.signal });
+            const res = await fetch(url, { cache: "no-store", signal: controller.signal });
             if (res.status === 304) return;
             if (!res.ok) throw new Error(`${site} API responded with ${res.status}`);
 
             const response = await res.json();
-            const etag = res.headers.get("ETag") || "";
             const dataHash = (response && (response.data_hash || response.dataHash)) || "";
 
-            const nextKey = dataHash || etag;
-            const prevKey = cached?.dataHash || cached?.etag || "";
+            const nextKey = dataHash;
+            const prevKey = cached?.dataHash || "";
             if (nextKey && prevKey && nextKey === prevKey) return;
 
             if (site !== currentSite) return;
@@ -326,7 +319,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 renderPlayers(data);
                 writeCache(site, {
                     players: data,
-                    etag,
                     dataHash,
                     period: response?.period || null,
                     ended: Boolean(response?.ended),
@@ -344,7 +336,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 renderPlayers(data);
                 writeCache(site, {
                     players: data,
-                    etag,
                     dataHash,
                     period: response?.period || null,
                     ended: Boolean(response?.ended),
