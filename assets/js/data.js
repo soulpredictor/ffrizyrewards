@@ -17,6 +17,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentSite = localStorage.getItem("leaderboardSite") || "shuffle";
     const P = window.LeaderboardPeriods;
     const CACHE_PREFIX = "leaderboardCache:";
+    const inFlight = { shuffle: null, packy: null };
+    const requestSeq = { shuffle: 0, packy: 0 };
 
     const urlParams = new URLSearchParams(window.location.search);
     const dayParam = urlParams.get("day");
@@ -192,12 +194,17 @@ document.addEventListener("DOMContentLoaded", () => {
             const next = el.getAttribute("data-leaderboard-site");
             if (!next || next === currentSite) return;
 
+            const prevSite = currentSite;
             currentSite = next;
             localStorage.setItem("leaderboardSite", currentSite);
             leaderboardEnded = false;
             if (rolloverTimeout) {
                 clearTimeout(rolloverTimeout);
                 rolloverTimeout = null;
+            }
+            if (inFlight[prevSite]) {
+                inFlight[prevSite].abort();
+                inFlight[prevSite] = null;
             }
 
             if (currentSite === "shuffle") {
@@ -228,6 +235,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 leaderboardEnded = Boolean(cached.ended);
                 renderPlayers(cached.players);
+            } else {
+                renderPlayers([]);
             }
 
             updateSiteUI();
@@ -237,27 +246,35 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     const updateLeaderboard = async () => {
-        const url = new URL(ENDPOINTS[currentSite] || ENDPOINTS.shuffle, apiOrigin);
+        const site = currentSite;
+        const seq = (requestSeq[site] = (requestSeq[site] || 0) + 1);
+        if (inFlight[site]) inFlight[site].abort();
+        const controller = new AbortController();
+        inFlight[site] = controller;
 
-        if (currentSite === "shuffle") {
-            url.searchParams.set("startTime", startTime.toString());
-            url.searchParams.set("endTime", endTime.toString());
+        const url = new URL(ENDPOINTS[site] || ENDPOINTS.shuffle, apiOrigin);
+
+        if (site === "shuffle") {
+            const start = startTime;
+            const end = endTime;
+            url.searchParams.set("startTime", start.toString());
+            url.searchParams.set("endTime", end.toString());
         } else {
             url.searchParams.set("site", "packy");
         }
         url.searchParams.set("_t", Date.now().toString());
 
         try {
-            const cached = readCache(currentSite);
+            const cached = readCache(site);
             const headers = {
                 "Cache-Control": "no-cache, no-store, must-revalidate",
                 Pragma: "no-cache",
                 ...(cached?.etag ? { "If-None-Match": cached.etag } : {}),
             };
 
-            const res = await fetch(url, { cache: "no-store", headers });
+            const res = await fetch(url, { cache: "no-store", headers, signal: controller.signal });
             if (res.status === 304) return;
-            if (!res.ok) throw new Error(`${currentSite} API responded with ${res.status}`);
+            if (!res.ok) throw new Error(`${site} API responded with ${res.status}`);
 
             const response = await res.json();
             const etag = res.headers.get("ETag") || "";
@@ -267,7 +284,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const prevKey = cached?.dataHash || cached?.etag || "";
             if (nextKey && prevKey && nextKey === prevKey) return;
 
-            if (currentSite === "shuffle") {
+            if (site !== currentSite) return;
+            if (seq !== requestSeq[site]) return;
+
+            if (site === "shuffle") {
                 const data =
                     response && Array.isArray(response.data)
                         ? response.data
@@ -304,7 +324,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 renderPlayers(data);
-                writeCache(currentSite, {
+                writeCache(site, {
                     players: data,
                     etag,
                     dataHash,
@@ -322,7 +342,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     updateHeroCopy();
                 }
                 renderPlayers(data);
-                writeCache(currentSite, {
+                writeCache(site, {
                     players: data,
                     etag,
                     dataHash,
@@ -331,7 +351,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
             }
         } catch (error) {
+            if (error && (error.name === "AbortError" || error.code === 20)) return;
             console.error("Failed to load leaderboard data:", error);
+            if (site === currentSite && !(readCache(site)?.players?.length || 0)) {
+                renderPlayers([]);
+            }
+        } finally {
+            if (inFlight[site] === controller) inFlight[site] = null;
         }
     };
 
