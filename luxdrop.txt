@@ -1,0 +1,30 @@
+API Endpoint: /external/affiliates
+This endpoint is designed to retrieve information about affiliate codes. A GET request is sent
+to the following URL:
+JavaScript
+https://api.luxdrop.com/external/affiliates
+Query Parameters
+● codes(REQUIRED): A comma-separated list of affiliate codes you want to retrieve
+information about (e.g., yourcode1,yourcode2). This parameter is mandatory, and
+the request will not work without it.
+● startDate(OPTIONAL): A specific start date in the format YYYY-MM-DD. If
+provided, the response will include data starting from this date.
+● endDate(OPTIONAL): A specific end date in the format YYYY-MM-DD. If provided,
+the response will include data up to this date.
+Behavior with Dates
+1. If startDate and endDate are not provided:
+○ Theresponse will include information for the requested affiliate codes for all
+available time, starting from the beginning of the data records.
+2. If only startDate is provided:
+○ Theresponse will include information from the specified start date up to the
+most recent data.
+3. If only endDate is provided:
+○ Theresponse will include information from the beginning of the data records
+up to the specified end date.
+This flexibility allows you to tailor your queries to fit specific timeframes or retrieve complete
+historical data for the affiliate codes.
+Authorization
+To use this endpoint, you must include an API key in the request header. The API key is
+provided by the administrator. Add the key to your request as follows:
+x-api-key: your_api_key
+Without this header, the request will not be authorized, and you will receive an error.
