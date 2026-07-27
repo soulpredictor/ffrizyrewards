@@ -1,6 +1,5 @@
 /**
- * Eastern-time period helpers for Shuffle (monthly) and LUXDROP (custom monthly).
- * LUXDROP period: July 27, 2026 00:00 ET → August 26, 2026 23:59:59 ET.
+ * Eastern-time period helpers for Shuffle (monthly) and LUXDROP (auto-rolling monthly: 27th to 26th).
  */
 (function (global) {
     const ET = "America/New_York";
@@ -73,15 +72,35 @@
         return { start, end, label: "weekly" };
     }
 
-    /** Fixed LUXDROP campaign period: Jul 27 – Aug 26, 2026 ET. */
-    function getLuxdropPeriodBounds() {
-        const start = easternToUtc(2026, 6, 27, 0, 0, 0);   // July 27 (month is 0-indexed)
-        const end   = easternToUtc(2026, 7, 26, 23, 59, 59); // August 26
+    /** Auto-rolling monthly LUXDROP campaign: 27th 00:00:00 ET to 26th 23:59:59 ET of next month. */
+    function getLuxdropPeriodBounds(now = new Date()) {
+        const p = easternParts(now);
+        let startYear = p.year;
+        let startMonth = p.month;
+        let endYear = p.year;
+        let endMonth = p.month;
+
+        if (p.day >= 27) {
+            endMonth = p.month + 1;
+            if (endMonth > 11) {
+                endMonth = 0;
+                endYear++;
+            }
+        } else {
+            startMonth = p.month - 1;
+            if (startMonth < 0) {
+                startMonth = 11;
+                startYear--;
+            }
+        }
+
+        const start = easternToUtc(startYear, startMonth, 27, 0, 0, 0);
+        const end = easternToUtc(endYear, endMonth, 26, 23, 59, 59);
         return { start, end, label: "monthly" };
     }
 
     function getPeriodBounds(site, now = new Date()) {
-        return site === "packy" ? getLuxdropPeriodBounds() : getMonthBoundsEastern(now);
+        return site === "packy" || site === "luxdrop" ? getLuxdropPeriodBounds(now) : getMonthBoundsEastern(now);
     }
 
     function formatEasternRange(startMs, endMs) {

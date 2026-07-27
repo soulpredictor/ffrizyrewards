@@ -110,14 +110,17 @@ document.addEventListener("DOMContentLoaded", () => {
         const descEl = document.getElementById("leaderboardDescription");
         const rangeEl = document.getElementById("leaderboardPeriodRange");
 
-        const isLuxdrop = currentSite === "packy";
+        const isLuxdrop = currentSite === "packy" || currentSite === "luxdrop";
         if (titlePeriod) {
             titlePeriod.textContent = "Monthly";
         }
         if (descEl) {
-            descEl.textContent = isLuxdrop
-                ? "based on their total wagered amount for the Jul 27 – Aug 26 ET period."
-                : "based on their total wagered amount for the current month.";
+            if (isLuxdrop) {
+                const rangeStr = P.formatEasternRange(packyBounds.start, packyBounds.end);
+                descEl.textContent = `based on their total wagered amount for the ${rangeStr} ET period.`;
+            } else {
+                descEl.textContent = "based on their total wagered amount for the current month.";
+            }
         }
         if (rangeEl) {
             const bounds = isLuxdrop ? packyBounds : shuffleBounds;
@@ -230,7 +233,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     packyBounds = {
                         start: cached.period.startTime,
                         end: cached.period.endTime,
-                        label: "weekly",
+                        label: "monthly",
                     };
                 }
                 leaderboardEnded = Boolean(cached.ended);
@@ -329,7 +332,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     packyBounds = {
                         start: response.period.startTime,
                         end: response.period.endTime,
-                        label: "weekly",
+                        label: "monthly",
                     };
                     updateHeroCopy();
                 }
@@ -367,7 +370,7 @@ document.addEventListener("DOMContentLoaded", () => {
             packyBounds = {
                 start: initialCache.period.startTime,
                 end: initialCache.period.endTime,
-                label: "weekly",
+                label: "monthly",
             };
         }
         leaderboardEnded = Boolean(initialCache.ended);

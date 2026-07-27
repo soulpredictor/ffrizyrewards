@@ -19,7 +19,7 @@ _store_lock = threading.Lock()
 _init_lock = threading.Lock()
 
 DEFAULT_STORE = {"version": 1, "snapshots": [], "baselines": {}}
-SITES = ("packy", "shuffle")
+SITES = ("luxdrop", "packy", "shuffle")
 _initialized = False
 
 
@@ -48,8 +48,8 @@ def _store_is_empty(data: Dict[str, Any]) -> bool:
 
 def _canonical_site_str(site: Any) -> str:
     s = (str(site) if site is not None else "").strip().lower()
-    if s == "winovo":
-        return "packy"
+    if s in ("winovo", "packy", "luxdrop"):
+        return "luxdrop"
     return s
 
 
@@ -111,11 +111,11 @@ def _ensure_initialized() -> None:
                     if isinstance(s, dict) and _canonical_site_str(s.get("site")) == site
                 ]
                 legacy_baselines = legacy.get("baselines") or {}
-                if site == "packy":
+                if site in ("packy", "luxdrop"):
                     migrated_baselines = {
-                        ("packy:" + k.split(":", 1)[1] if k.startswith("winovo:") else k): v
+                        ("luxdrop:" + k.split(":", 1)[1] if k.startswith("winovo:") or k.startswith("packy:") else k): v
                         for k, v in legacy_baselines.items()
-                        if isinstance(k, str) and _canonical_site_str(k.split(":", 1)[0]) == "packy"
+                        if isinstance(k, str) and _canonical_site_str(k.split(":", 1)[0]) == "luxdrop"
                     }
                 else:
                     migrated_baselines = {
@@ -192,17 +192,30 @@ def get_week_bounds_et(now: Optional[datetime] = None) -> Tuple[datetime, dateti
     return monday, sunday_start, key
 
 
-def get_luxdrop_period_bounds() -> Tuple[datetime, datetime, str]:
-    """Fixed LUXDROP campaign: July 27, 2026 00:00 ET – August 26, 2026 23:59:59 ET."""
-    start = datetime(2026, 7, 27, 0, 0, 0, tzinfo=ET)
-    end   = datetime(2026, 8, 26, 23, 59, 59, tzinfo=ET)
-    key   = "2026-07-27-to-2026-08-26-luxdrop"
+def get_luxdrop_period_bounds(now: Optional[datetime] = None) -> Tuple[datetime, datetime, str]:
+    """Auto-rolling monthly LUXDROP campaign: 27th 00:00:00 ET to 26th 23:59:59 ET of next month."""
+    now = now or _now_et()
+    if now.day >= 27:
+        start = now.replace(day=27, hour=0, minute=0, second=0, microsecond=0)
+        if now.month == 12:
+            end = start.replace(year=now.year + 1, month=1, day=26, hour=23, minute=59, second=59)
+        else:
+            end = start.replace(month=now.month + 1, day=26, hour=23, minute=59, second=59)
+    else:
+        end = now.replace(day=26, hour=23, minute=59, second=59, microsecond=0)
+        if now.month == 1:
+            start = end.replace(year=now.year - 1, month=12, day=27, hour=0, minute=0, second=0)
+        else:
+            start = end.replace(month=now.month - 1, day=27, hour=0, minute=0, second=0)
+    
+    key = f"{start.year}-{start.month:02d}-27-to-{end.year}-{end.month:02d}-26-luxdrop"
     return start, end, key
 
 
 def get_period_bounds(site: str, now: Optional[datetime] = None) -> Tuple[datetime, datetime, str]:
-    if site == "luxdrop":
-        return get_luxdrop_period_bounds()
+    s = _canonical_site_str(site)
+    if s == "luxdrop":
+        return get_luxdrop_period_bounds(now)
     return get_month_bounds_et(now)
 
 

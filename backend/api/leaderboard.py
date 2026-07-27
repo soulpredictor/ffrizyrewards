@@ -368,10 +368,10 @@ def leaderboard():
 
     site = (request.args.get("site") or "").strip().lower()
     period_start_dt, period_end_dt, period_key = get_period_bounds(
-        "luxdrop" if site == "packy" else "shuffle"
+        "luxdrop" if site in ("packy", "luxdrop") else "shuffle"
     )
 
-    if site == "packy":
+    if site in ("packy", "luxdrop"):
         now_ts = time.time()
         cache_key = f"luxdrop:{period_key}"
         with _cache_lock:

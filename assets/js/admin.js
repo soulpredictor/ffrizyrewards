@@ -113,10 +113,11 @@
                 .map((p, i) => `${i + 1}. ${p.username} — $${formatMoney(p.wagerAmount)}`)
                 .join("<br>");
 
+            const siteDisplay = snap.site === "packy" || snap.site === "luxdrop" ? "LUXDROP" : (snap.site || "—");
             const tr = document.createElement("tr");
             tr.innerHTML = `
         <td>${formatCaptured(snap.capturedAt)}</td>
-        <td><span class="badge bg-secondary text-capitalize">${snap.site || "—"}</span></td>
+        <td><span class="badge bg-secondary text-capitalize">${siteDisplay}</span></td>
         <td><code class="text-white-50">${snap.periodKey || "—"}</code></td>
         <td>${summary || "—"}</td>
       `;
