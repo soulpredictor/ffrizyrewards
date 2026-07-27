@@ -1,3 +1,4 @@
+API Key: 6b0b6994369fd4092fee9e7ea9dc9c05d3caa7aecb8342bd8f710132ccbca5a7
 API Endpoint: /external/affiliates
 This endpoint is designed to retrieve information about affiliate codes. A GET request is sent
 to the following URL:
@@ -15,7 +16,7 @@ Behavior with Dates
 1. If startDate and endDate are not provided:
 ○ Theresponse will include information for the requested affiliate codes for all
 available time, starting from the beginning of the data records.
-2. If only startDate is provided:
+2. If only startDate is provided:   
 ○ Theresponse will include information from the specified start date up to the
 most recent data.
 3. If only endDate is provided:
@@ -26,5 +27,5 @@ historical data for the affiliate codes.
 Authorization
 To use this endpoint, you must include an API key in the request header. The API key is
 provided by the administrator. Add the key to your request as follows:
-x-api-key: your_api_key
+x-api-key: 6b0b6994369fd4092fee9e7ea9dc9c05d3caa7aecb8342bd8f710132ccbca5a7
 Without this header, the request will not be authorized, and you will receive an error.

@@ -1,6 +1,6 @@
 /**
- * Eastern-time period helpers for Shuffle (monthly) and LUXDROP (weekly).
- * LUXDROP week: Monday 00:00 ET → next Monday 00:00 ET (exclusive end).
+ * Eastern-time period helpers for Shuffle (monthly) and LUXDROP (custom monthly).
+ * LUXDROP period: July 27, 2026 00:00 ET → August 26, 2026 23:59:59 ET.
  */
 (function (global) {
     const ET = "America/New_York";
@@ -73,8 +73,15 @@
         return { start, end, label: "weekly" };
     }
 
+    /** Fixed LUXDROP campaign period: Jul 27 – Aug 26, 2026 ET. */
+    function getLuxdropPeriodBounds() {
+        const start = easternToUtc(2026, 6, 27, 0, 0, 0);   // July 27 (month is 0-indexed)
+        const end   = easternToUtc(2026, 7, 26, 23, 59, 59); // August 26
+        return { start, end, label: "monthly" };
+    }
+
     function getPeriodBounds(site, now = new Date()) {
-        return site === "packy" ? getWeekBoundsEastern(now) : getMonthBoundsEastern(now);
+        return site === "packy" ? getLuxdropPeriodBounds() : getMonthBoundsEastern(now);
     }
 
     function formatEasternRange(startMs, endMs) {

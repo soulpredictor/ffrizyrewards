@@ -21,8 +21,8 @@ API_URL = os.environ.get(
     "https://affiliate.shuffle.com/wager/96cc7e48-64b2-4120-b07d-779f3a9fd870",
 )
 LUXDROP_API_BASE = (os.environ.get("LUXDROP_API_BASE") or "https://api.luxdrop.com").rstrip("/")
-LUXDROP_API_KEY = os.environ.get("LUXDROP_API_KEY") or "64913ffff71d5c9c03a50d365dfe1e483b8e34e7b3f067f22f6e5d3bbe91a1d6"
-LUXDROP_CUSTOM_KEY = os.environ.get("LUXDROP_CUSTOM_KEY") or "f15bb7c2-30c6-4e0e-9593-174602ca9fd5"
+LUXDROP_API_KEY = os.environ.get("LUXDROP_API_KEY") or "6b0b6994369fd4092fee9e7ea9dc9c05d3caa7aecb8342bd8f710132ccbca5a7"
+LUXDROP_AFFILIATE_CODE = os.environ.get("LUXDROP_AFFILIATE_CODE") or "ffrizy"
 API_TIMEOUT = float(os.environ.get("SHUFFLE_STATS_TIMEOUT", "5"))
 SESSION = requests.Session()
 
@@ -170,97 +170,156 @@ def is_leaderboard_ended() -> bool:
 
 
 def _luxdrop_headers() -> Dict[str, str]:
-    headers: Dict[str, str] = {}
+    """Authorization header for LUXDROP API (x-api-key as documented)."""
     if LUXDROP_API_KEY:
-        headers["X-API-Key"] = LUXDROP_API_KEY
-    if LUXDROP_CUSTOM_KEY:
-        headers["X-Custom-Key"] = LUXDROP_CUSTOM_KEY
-    return headers
+        return {"x-api-key": LUXDROP_API_KEY}
+    return {}
 
 
-def fetch_luxdrop_leaderboards() -> Dict[str, Any]:
+def fetch_luxdrop_leaderboards(start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Fetch affiliate leaderboard data from the LUXDROP API.
+
+    GET https://api.luxdrop.com/external/affiliates
+    Required param : codes  (comma-separated affiliate codes)
+    Optional params: startDate, endDate  (YYYY-MM-DD)
+    Header         : x-api-key: <key>
+
+    The response is a JSON object (or list) containing per-user wager data
+    for the requested affiliate code(s).  We normalise it into the internal
+    {username, wagerAmount} list used by the rest of the system.
+    """
     if not LUXDROP_API_KEY:
         return {"status": "error", "error": "missing_luxdrop_api_key"}
 
     url = f"{LUXDROP_API_BASE}/external/affiliates"
+    params: Dict[str, str] = {"codes": LUXDROP_AFFILIATE_CODE}
+    if start_date:
+        params["startDate"] = start_date
+    if end_date:
+        params["endDate"] = end_date
+
     try:
         response = SESSION.get(
             url,
             timeout=API_TIMEOUT,
             headers=_luxdrop_headers(),
-            params={"codes": "ffrizy"},
+            params=params,
         )
-        payload = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+        ct = response.headers.get("content-type", "")
+        try:
+            payload = response.json() if "json" in ct or response.text.strip().startswith(("{", "[")) else None
+        except ValueError:
+            payload = None
+
         if not response.ok:
             status_code = response.status_code
-            if isinstance(payload, dict) and payload:
+            if isinstance(payload, (dict, list)) and payload:
                 return {"status": "error", "error": "luxdrop_upstream_error", "statusCode": status_code, "upstream": payload}
             return {"status": "error", "error": "luxdrop_upstream_error", "statusCode": status_code}
+
     except requests.RequestException as exc:
         app.logger.error(f"Failed to fetch LUXDROP leaderboard: {exc}", exc_info=True)
         return {"status": "error", "error": "luxdrop_upstream_error"}
-    except ValueError:
+
+    if payload is None:
         return {"status": "error", "error": "luxdrop_invalid_json"}
 
-    leaderboards = (
-        payload.get("data", {}).get("leaderboards")
-        if isinstance(payload, dict)
-        else None
-    )
-    if payload.get("success") is not True or not isinstance(leaderboards, list):
+    # -------------------------------------------------------------------------
+    # Normalise the LUXDROP response into a flat list of {username, wagerAmount}
+    # The API returns data for the requested affiliate code.
+    # Possible shapes:
+    #   Shape A: list of user objects directly
+    #      [{"username": "...", "wager_amount": 123.45, ...}, ...]
+    #   Shape B: dict with a top-level list key  ("data", "users", "affiliates", etc.)
+    #      {"data": [{"username": "...", "wager_amount": 123.45}, ...]}
+    #   Shape C: dict keyed by affiliate code, each value holding user list
+    #      {"ffrizy": {"users": [{"username": ..., "wager_amount": ...}]}}
+    # We try each shape in order.
+    # -------------------------------------------------------------------------
+    entries = _extract_luxdrop_users(payload)
+    if entries is None:
+        app.logger.warning(f"LUXDROP unexpected payload shape: {str(payload)[:300]}")
         return {"status": "error", "error": "luxdrop_unexpected_payload"}
 
-    return {"status": "ok", "data": leaderboards}
+    return {"status": "ok", "data": entries}
 
 
-def _pick_luxdrop_leaderboard(leaderboards: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    if not leaderboards:
+def _extract_luxdrop_users(payload: Any) -> Optional[List[Dict[str, Any]]]:
+    """
+    Convert whatever LUXDROP sends into a flat list of raw user dicts.
+    Returns None if the payload shape is unrecognised.
+    """
+    # Shape A — payload is already a list
+    if isinstance(payload, list):
+        return [e for e in payload if isinstance(e, dict)]
+
+    if not isinstance(payload, dict):
         return None
-    for desired in ("active", "upcoming", "ended"):
-        for lb in leaderboards:
-            if not isinstance(lb, dict):
-                continue
-            if (lb.get("time_status") or "").strip().lower() == desired:
-                return lb
-    for lb in leaderboards:
-        if isinstance(lb, dict):
-            return lb
+
+    # Shape B — look for a list under common keys
+    for key in ("data", "users", "affiliates", "leaderboard", "entries", "results"):
+        val = payload.get(key)
+        if isinstance(val, list):
+            flat = []
+            for item in val:
+                if isinstance(item, dict):
+                    # item might itself have a nested users list
+                    inner = item.get("users") or item.get("entries")
+                    if isinstance(inner, list):
+                        flat.extend([e for e in inner if isinstance(e, dict)])
+                    else:
+                        flat.append(item)
+            return flat
+
+    # Shape C — dict keyed by affiliate code
+    for code_key, code_val in payload.items():
+        if isinstance(code_val, dict):
+            for sub in ("users", "entries", "leaderboard", "data"):
+                inner = code_val.get(sub)
+                if isinstance(inner, list):
+                    return [e for e in inner if isinstance(e, dict)]
+        if isinstance(code_val, list):
+            return [e for e in code_val if isinstance(e, dict)]
+
+    # Fallback — treat the whole dict as one user record
+    if any(k in payload for k in ("username", "user", "wager_amount", "wagered")):
+        return [payload]
+
     return None
 
 
-def _extract_luxdrop_entries(lb: Any) -> List[Dict[str, Any]]:
-    if not isinstance(lb, dict):
-        return []
-    candidates = [
-        lb.get("entries"),
-        lb.get("data", {}).get("entries") if isinstance(lb.get("data"), dict) else None,
-        lb.get("leaderboard", {}).get("entries") if isinstance(lb.get("leaderboard"), dict) else None,
-        lb.get("result", {}).get("entries") if isinstance(lb.get("result"), dict) else None,
-    ]
-    for c in candidates:
-        if isinstance(c, list):
-            return [e for e in c if isinstance(e, dict)]
-    return []
+def _normalise_luxdrop_entry(entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Turn a raw LUXDROP user dict into {username, wagerAmount}.
+    Handles multiple field-name conventions.
+    """
+    username = (
+        entry.get("username")
+        or entry.get("user")
+        or entry.get("name")
+        or entry.get("affiliate_code")
+        or ""
+    )
+    if not username:
+        return None
 
+    # wager amount field names used by various affiliate APIs
+    raw_amount = (
+        entry.get("wager_amount")
+        or entry.get("wagerAmount")
+        or entry.get("wagered")
+        or entry.get("total_wagered")
+        or entry.get("total_wagered_usd")
+        or entry.get("totalWageredUsd")
+        or 0
+    )
+    try:
+        amount = float(raw_amount or 0)
+    except (TypeError, ValueError):
+        amount = 0.0
 
-def _pick_luxdrop_entries(leaderboards: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    if not leaderboards:
-        return []
-    for desired in ("active", "upcoming", "ended"):
-        for lb in leaderboards:
-            if not isinstance(lb, dict):
-                continue
-            if (lb.get("time_status") or "").strip().lower() != desired:
-                continue
-            entries = _extract_luxdrop_entries(lb)
-            if entries:
-                return entries
-    for lb in leaderboards:
-        entries = _extract_luxdrop_entries(lb)
-        if entries:
-            return entries
-    picked = _pick_luxdrop_leaderboard(leaderboards)
-    return _extract_luxdrop_entries(picked)
+    return {"username": str(username), "wagerAmount": amount}
 
 
 def capture_shuffle_snapshot() -> None:
@@ -280,22 +339,25 @@ def capture_shuffle_snapshot() -> None:
 
 def capture_luxdrop_snapshot() -> None:
     period_start_dt, period_end_dt, period_key = get_period_bounds("luxdrop")
-    payload = fetch_luxdrop_leaderboards()
+    # Pass the current week's date range so LUXDROP returns only this week's data
+    start_date = period_start_dt.strftime("%Y-%m-%d")
+    end_date = period_end_dt.strftime("%Y-%m-%d")
+
+    payload = fetch_luxdrop_leaderboards(start_date=start_date, end_date=end_date)
     if payload.get("status") != "ok":
+        app.logger.warning(f"LUXDROP snapshot skipped: {payload.get('error')}")
         return
 
-    entries = _pick_luxdrop_entries(payload.get("data", []))
+    raw_entries = payload.get("data") or []
     simplified: List[Dict[str, Any]] = []
-    for entry in entries:
+    for entry in raw_entries:
         if not isinstance(entry, dict):
             continue
-        raw_amount = entry.get("total_wagered_usd", entry.get("totalWageredUsd"))
-        try:
-            amount = float(raw_amount or 0)
-        except (TypeError, ValueError):
-            amount = 0.0
-        simplified.append({"username": entry.get("username") or "User", "wagerAmount": amount})
+        normalised = _normalise_luxdrop_entry(entry)
+        if normalised:
+            simplified.append(normalised)
 
+    simplified.sort(key=lambda x: x["wagerAmount"], reverse=True)
     if simplified:
         record_snapshot("luxdrop", simplified, period_start_dt, period_end_dt, period_key)
 
@@ -318,19 +380,19 @@ def leaderboard():
                 return _respond(cached[1], cached[2])
 
         stale = False
-        payload = fetch_luxdrop_leaderboards()
-        leaderboards = payload.get("data", []) if payload.get("status") == "ok" else []
-        entries = _pick_luxdrop_entries(leaderboards) if isinstance(leaderboards, list) else []
+        # Pass the week's date window to the LUXDROP API
+        start_date = period_start_dt.strftime("%Y-%m-%d")
+        end_date = period_end_dt.strftime("%Y-%m-%d")
+        payload = fetch_luxdrop_leaderboards(start_date=start_date, end_date=end_date)
+        raw_entries = payload.get("data") or [] if payload.get("status") == "ok" else []
         simplified: List[Dict[str, Any]] = []
-        for entry in entries:
+        for entry in raw_entries if isinstance(raw_entries, list) else []:
             if not isinstance(entry, dict):
                 continue
-            raw_amount = entry.get("total_wagered_usd", entry.get("totalWageredUsd"))
-            try:
-                amount = float(raw_amount or 0)
-            except (TypeError, ValueError):
-                amount = 0.0
-            simplified.append({"username": entry.get("username") or "User", "wagerAmount": amount})
+            normalised = _normalise_luxdrop_entry(entry)
+            if normalised:
+                simplified.append(normalised)
+        simplified.sort(key=lambda x: x["wagerAmount"], reverse=True)
 
         if not simplified:
             fallback = _latest_snapshot_players("luxdrop", period_key)
@@ -354,14 +416,7 @@ def leaderboard():
 
         end_ms = int(period_end_dt.timestamp() * 1000)
         start_ms = int(period_start_dt.timestamp() * 1000)
-        ended = False
-        for lb in leaderboards if isinstance(leaderboards, list) else []:
-            if not isinstance(lb, dict):
-                continue
-            if _extract_luxdrop_entries(lb):
-                ended = (lb.get("time_status") or "").strip().lower() == "ended"
-                break
-        ended = ended or (datetime.utcnow().timestamp() * 1000 >= end_ms)
+        ended = datetime.utcnow().timestamp() * 1000 >= end_ms
         data_hash = _hash_response(period_key, ended, simplified)
         etag = f'W/"{data_hash}"'
         out = {
@@ -369,7 +424,7 @@ def leaderboard():
             "site": "luxdrop",
             "data": (simplified[:MAX_LEADERBOARD_PLAYERS] if len(simplified) > MAX_LEADERBOARD_PLAYERS else simplified),
             "period": {
-                "type": "weekly",
+                "type": "monthly",
                 "periodKey": period_key,
                 "startTime": start_ms,
                 "endTime": end_ms,
@@ -458,28 +513,39 @@ def leaderboard():
 
 @app.route("/api/luxdrop/stats", methods=["GET"])
 def luxdrop_stats():
-    start_date = request.args.get("start_date")
-    end_date = request.args.get("end_date")
-    if not start_date or not end_date:
-        return jsonify({"statusCode": 422, "error": "VALIDATION_ERROR", "message": "start_date and end_date are required"}), 422
+    """
+    Proxy endpoint — forward a date-ranged stats request to the LUXDROP API.
+    Accepts: startDate (YYYY-MM-DD), endDate (YYYY-MM-DD), codes (optional).
+    """
+    start_date = request.args.get("startDate") or request.args.get("start_date")
+    end_date = request.args.get("endDate") or request.args.get("end_date")
+    codes = request.args.get("codes") or LUXDROP_AFFILIATE_CODE
+
     if not LUXDROP_API_KEY:
         return jsonify({"statusCode": 500, "error": "CONFIG_ERROR", "message": "Missing LUXDROP_API_KEY"}), 500
 
     url = f"{LUXDROP_API_BASE}/external/affiliates"
+    params: Dict[str, str] = {"codes": codes}
+    if start_date:
+        params["startDate"] = start_date
+    if end_date:
+        params["endDate"] = end_date
+
     try:
         response = SESSION.get(
             url,
             timeout=API_TIMEOUT,
             headers=_luxdrop_headers(),
-            params={"start_date": start_date, "end_date": end_date},
+            params=params,
         )
-        payload = response.json() if response.headers.get("content-type", "").startswith("application/json") else {}
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {}
         return jsonify(payload), response.status_code if not response.ok else 200
     except requests.RequestException as exc:
         app.logger.error(f"Failed to fetch LUXDROP stats: {exc}", exc_info=True)
         return jsonify({"statusCode": 502, "error": "UPSTREAM_ERROR", "message": "LUXDROP upstream error"}), 502
-    except ValueError:
-        return jsonify({"statusCode": 502, "error": "UPSTREAM_INVALID_JSON", "message": "Invalid JSON from LUXDROP"}), 502
 
 
 if __name__ == "__main__":

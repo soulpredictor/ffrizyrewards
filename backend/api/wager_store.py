@@ -188,13 +188,21 @@ def get_week_bounds_et(now: Optional[datetime] = None) -> Tuple[datetime, dateti
     )
     sunday_start = monday + timedelta(days=6)
     iso_year, iso_week, _ = monday.isocalendar()
-    key = f"{iso_year}-W{iso_week:02d}-packy"
+    key = f"{iso_year}-W{iso_week:02d}-luxdrop"
     return monday, sunday_start, key
 
 
+def get_luxdrop_period_bounds() -> Tuple[datetime, datetime, str]:
+    """Fixed LUXDROP campaign: July 27, 2026 00:00 ET – August 26, 2026 23:59:59 ET."""
+    start = datetime(2026, 7, 27, 0, 0, 0, tzinfo=ET)
+    end   = datetime(2026, 8, 26, 23, 59, 59, tzinfo=ET)
+    key   = "2026-07-27-to-2026-08-26-luxdrop"
+    return start, end, key
+
+
 def get_period_bounds(site: str, now: Optional[datetime] = None) -> Tuple[datetime, datetime, str]:
-    if site == "packy":
-        return get_week_bounds_et(now)
+    if site == "luxdrop":
+        return get_luxdrop_period_bounds()
     return get_month_bounds_et(now)
 
 

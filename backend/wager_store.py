@@ -1,5 +1,5 @@
 """
-JSON-backed wager snapshot storage for admin history and LUXDROP weekly snapshots.
+JSON-backed wager snapshot storage for admin history and Packy weekly snapshots.
 """
 import json
 import os
@@ -19,7 +19,7 @@ _store_lock = threading.Lock()
 _init_lock = threading.Lock()
 
 DEFAULT_STORE = {"version": 1, "snapshots": [], "baselines": {}}
-SITES = ("luxdrop", "shuffle")
+SITES = ("packy", "shuffle")
 _initialized = False
 
 
@@ -49,7 +49,7 @@ def _store_is_empty(data: Dict[str, Any]) -> bool:
 def _canonical_site_str(site: Any) -> str:
     s = (str(site) if site is not None else "").strip().lower()
     if s == "winovo":
-        return "luxdrop"
+        return "packy"
     return s
 
 
@@ -111,11 +111,11 @@ def _ensure_initialized() -> None:
                     if isinstance(s, dict) and _canonical_site_str(s.get("site")) == site
                 ]
                 legacy_baselines = legacy.get("baselines") or {}
-                if site == "luxdrop":
+                if site == "packy":
                     migrated_baselines = {
-                        ("luxdrop:" + k.split(":", 1)[1] if k.startswith("winovo:") else k): v
+                        ("packy:" + k.split(":", 1)[1] if k.startswith("winovo:") else k): v
                         for k, v in legacy_baselines.items()
-                        if isinstance(k, str) and _canonical_site_str(k.split(":", 1)[0]) == "luxdrop"
+                        if isinstance(k, str) and _canonical_site_str(k.split(":", 1)[0]) == "packy"
                     }
                 else:
                     migrated_baselines = {
@@ -192,9 +192,17 @@ def get_week_bounds_et(now: Optional[datetime] = None) -> Tuple[datetime, dateti
     return monday, sunday_start, key
 
 
+def get_luxdrop_period_bounds() -> Tuple[datetime, datetime, str]:
+    """Fixed LUXDROP campaign: July 27, 2026 00:00 ET – August 26, 2026 23:59:59 ET."""
+    start = datetime(2026, 7, 27, 0, 0, 0, tzinfo=ET)
+    end   = datetime(2026, 8, 26, 23, 59, 59, tzinfo=ET)
+    key   = "2026-07-27-to-2026-08-26-luxdrop"
+    return start, end, key
+
+
 def get_period_bounds(site: str, now: Optional[datetime] = None) -> Tuple[datetime, datetime, str]:
     if site == "luxdrop":
-        return get_week_bounds_et(now)
+        return get_luxdrop_period_bounds()
     return get_month_bounds_et(now)
 
 

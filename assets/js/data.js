@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const MAX_PLAYERS = 10;
     const PRIZES = {
         shuffle: [1500, 750, 375, 225, 150, 20, 20, 20, 20, 20],
-        packy: [150, 75, 38, 22, 15, 0, 0, 0, 0, 0],
+        packy: [250, 125, 75, 35, 15, 0, 0, 0, 0, 0],
     };
 
     let refreshInterval = null;
@@ -110,17 +110,17 @@ document.addEventListener("DOMContentLoaded", () => {
         const descEl = document.getElementById("leaderboardDescription");
         const rangeEl = document.getElementById("leaderboardPeriodRange");
 
-        const isWeekly = currentSite === "packy";
+        const isLuxdrop = currentSite === "packy";
         if (titlePeriod) {
-            titlePeriod.textContent = isWeekly ? "Weekly" : "Monthly";
+            titlePeriod.textContent = "Monthly";
         }
         if (descEl) {
-            descEl.textContent = isWeekly
-                ? "based on their total wagered amount for the current week (Mon–Sun ET)."
+            descEl.textContent = isLuxdrop
+                ? "based on their total wagered amount for the Jul 27 – Aug 26 ET period."
                 : "based on their total wagered amount for the current month.";
         }
         if (rangeEl) {
-            const bounds = isWeekly ? packyBounds : shuffleBounds;
+            const bounds = isLuxdrop ? packyBounds : shuffleBounds;
             rangeEl.textContent = P.formatEasternRange(bounds.start, bounds.end);
         }
     };
