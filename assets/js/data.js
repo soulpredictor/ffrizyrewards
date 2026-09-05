@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const MAX_PLAYERS = 10;
     const PRIZES = {
         shuffle: [1500, 750, 375, 225, 150, 20, 20, 20, 20, 20],
-        packy: [250, 125, 75, 35, 15, 0, 0, 0, 0, 0],
+        packy:   [250, 125, 75, 35, 15, 0, 0, 0, 0, 0],
     };
 
     let refreshInterval = null;
@@ -110,12 +110,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const descEl = document.getElementById("leaderboardDescription");
         const rangeEl = document.getElementById("leaderboardPeriodRange");
 
-        const isLuxdrop = currentSite === "packy" || currentSite === "luxdrop";
+        const isStake = currentSite === "packy" || currentSite === "stake";
         if (titlePeriod) {
             titlePeriod.textContent = "Monthly";
         }
         if (descEl) {
-            if (isLuxdrop) {
+            if (isStake) {
                 const rangeStr = P.formatEasternRange(packyBounds.start, packyBounds.end);
                 descEl.textContent = `based on their total wagered amount for the ${rangeStr} ET period.`;
             } else {
@@ -123,7 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
         if (rangeEl) {
-            const bounds = isLuxdrop ? packyBounds : shuffleBounds;
+            const bounds = isStake ? packyBounds : shuffleBounds;
             rangeEl.textContent = P.formatEasternRange(bounds.start, bounds.end);
         }
     };
@@ -138,14 +138,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const labelEl = document.getElementById("leaderboardSiteLabel");
         if (labelEl) {
-            labelEl.textContent = currentSite === "packy" ? "LUXDROP" : "Shuffle";
+            labelEl.textContent = currentSite === "packy" ? "Stake" : "Shuffle";
         }
 
         const playBtn = document.querySelector(".play-now-btn a, #navbarNav .btn-custom");
         if (playBtn) {
             playBtn.href =
                 currentSite === "packy"
-                    ? "https://luxdrop.com/"
+                    ? "https://stake.com/?c=ffrizy"
                     : "https://shuffle.com/?r=ffrizy";
         }
 
