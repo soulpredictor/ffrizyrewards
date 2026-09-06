@@ -13,7 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let inFlight = null;
     let requestSeq = 0;
 
-    // ── Cache helpers ──────────────────────────────────────────────────────────
+    // ── Cache helperss ──────────────────────────────────────────────────────────
 
     const readCache = () => {
         try {
