@@ -1,94 +1,55 @@
 document.addEventListener("DOMContentLoaded", () => {
     const backendBase = (window.__BACKEND_BASE__ || "").toString().replace(/\/+$/, "");
     const apiOrigin = backendBase || window.location.origin;
-    const ENDPOINTS = {
-        shuffle: "/api/leaderboard",
-        packy: "/api/leaderboard",
-    };
+    const API_ENDPOINT = "/api/leaderboard";
     const MAX_PLAYERS = 10;
-    const PRIZES = {
-        shuffle: [1500, 750, 375, 225, 150, 20, 20, 20, 20, 20],
-        packy:   [250, 125, 75, 35, 15, 0, 0, 0, 0, 0],
-    };
+    const PRIZES = [1500, 800, 500, 350, 250, 175, 150, 125, 100, 50];
+
+    const P = window.LeaderboardPeriods;
+    const CACHE_KEY = "leaderboardCache:packy";
 
     let refreshInterval = null;
-    let rolloverTimeout = null;
-    let leaderboardEnded = false;
-    let currentSite = localStorage.getItem("leaderboardSite") || "shuffle";
-    const P = window.LeaderboardPeriods;
-    const CACHE_PREFIX = "leaderboardCache:";
-    const inFlight = { shuffle: null, packy: null };
-    const requestSeq = { shuffle: 0, packy: 0 };
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const dayParam = urlParams.get("day");
-
-    let shuffleBounds = P.getPeriodBounds("shuffle");
     let packyBounds = P.getPeriodBounds("packy");
-    let startTime = shuffleBounds.start;
-    let endTime = shuffleBounds.end;
+    let inFlight = null;
+    let requestSeq = 0;
 
-    if (currentSite === "winovo") {
-        currentSite = "packy";
-        localStorage.setItem("leaderboardSite", currentSite);
-    }
+    // ── Cache helpers ──────────────────────────────────────────────────────────
 
-    const cacheKey = (site) => `${CACHE_PREFIX}${site}`;
-
-    const readCache = (site) => {
+    const readCache = () => {
         try {
-            const raw = localStorage.getItem(cacheKey(site));
+            const raw = localStorage.getItem(CACHE_KEY);
             if (!raw) return null;
             const parsed = JSON.parse(raw);
             if (!parsed || typeof parsed !== "object") return null;
-            const players = Array.isArray(parsed.players) ? parsed.players : [];
-            const etag = typeof parsed.etag === "string" ? parsed.etag : "";
-            const dataHash = typeof parsed.dataHash === "string" ? parsed.dataHash : "";
-            const period = parsed.period && typeof parsed.period === "object" ? parsed.period : null;
-            const ended = Boolean(parsed.ended);
-            return { players, etag, dataHash, period, ended };
+            return {
+                players:  Array.isArray(parsed.players) ? parsed.players : [],
+                dataHash: typeof parsed.dataHash === "string" ? parsed.dataHash : "",
+                period:   parsed.period && typeof parsed.period === "object" ? parsed.period : null,
+                ended:    Boolean(parsed.ended),
+            };
         } catch {
             return null;
         }
     };
 
-    const writeCache = (site, payload) => {
-        try {
-            localStorage.setItem(cacheKey(site), JSON.stringify(payload));
-        } catch {}
+    const writeCache = (payload) => {
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(payload)); } catch {}
     };
 
-    if (dayParam && currentSite === "shuffle") {
-        const day = parseInt(dayParam, 10);
-        const now = new Date();
-        const formatter = new Intl.DateTimeFormat("en", {
-            timeZone: P.ET,
-            year: "numeric",
-            month: "numeric",
-        });
-        const parts = formatter.formatToParts(now);
-        const year = parseInt(parts.find((p) => p.type === "year").value, 10);
-        const month = parseInt(parts.find((p) => p.type === "month").value, 10) - 1;
-        if (day >= 1 && day <= 31) {
-            startTime = P.easternToUtc(year, month, day, 0, 0, 0);
-            endTime = P.easternToUtc(year, month, day, 23, 59, 59);
-        }
-    }
+    // ── Currency formatter ────────────────────────────────────────────────────
 
-    const formatCurrency = (value) => {
-        const amount = Number(value) || 0;
-        return amount.toLocaleString("en-US", {
+    const formatCurrency = (value) =>
+        (Number(value) || 0).toLocaleString("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
         });
-    };
+
+    // ── Prize display ─────────────────────────────────────────────────────────
 
     const updatePrizes = () => {
-        const prizes = PRIZES[currentSite] || PRIZES.shuffle;
-        const prizeEls = document.querySelectorAll("[data-prize-rank]");
-        prizeEls.forEach((el) => {
+        document.querySelectorAll("[data-prize-rank]").forEach((el) => {
             const rank = parseInt(el.getAttribute("data-prize-rank"), 10) - 1;
-            const amount = prizes[rank];
+            const amount = PRIZES[rank];
             if (amount > 0) {
                 el.innerHTML = `<i class="fa-solid fa-dollar-sign"></i>${amount.toLocaleString("en-US")}`;
                 el.closest("tr, .lead-card, .podium-card")?.classList.remove("prize-hidden");
@@ -98,73 +59,51 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
 
-        const total = prizes.slice(0, 5).reduce((a, b) => a + b, 0);
+        const total = PRIZES.reduce((a, b) => a + b, 0);
         const totalEl = document.getElementById("prizePoolTotal");
-        if (totalEl) {
-            totalEl.textContent = `$${total.toLocaleString("en-US")}`;
-        }
+        if (totalEl) totalEl.textContent = `$${total.toLocaleString("en-US")}`;
+
+        const topNEl = document.getElementById("prizePoolTopN");
+        if (topNEl) topNEl.textContent = `top ${PRIZES.filter((p) => p > 0).length} users`;
     };
+
+    // ── Hero copy ─────────────────────────────────────────────────────────────
 
     const updateHeroCopy = () => {
-        const titlePeriod = document.getElementById("leaderboardPeriodLabel");
-        const descEl = document.getElementById("leaderboardDescription");
-        const rangeEl = document.getElementById("leaderboardPeriodRange");
+        const titlePeriodEl = document.getElementById("leaderboardPeriodLabel");
+        const descEl        = document.getElementById("leaderboardDescription");
+        const rangeEl       = document.getElementById("leaderboardPeriodRange");
 
-        const isStake = currentSite === "packy" || currentSite === "stake";
-        if (titlePeriod) {
-            titlePeriod.textContent = "Monthly";
-        }
+        if (titlePeriodEl) titlePeriodEl.textContent = "Monthly";
         if (descEl) {
-            if (isStake) {
-                const rangeStr = P.formatEasternRange(packyBounds.start, packyBounds.end);
-                descEl.textContent = `based on their total wagered amount for the ${rangeStr} ET period.`;
-            } else {
-                descEl.textContent = "based on their total wagered amount for the current month.";
-            }
+            const rangeStr = P.formatEasternRange(packyBounds.start, packyBounds.end);
+            descEl.textContent = `based on their total wagered amount for the ${rangeStr} ET period.`;
         }
-        if (rangeEl) {
-            const bounds = isStake ? packyBounds : shuffleBounds;
-            rangeEl.textContent = P.formatEasternRange(bounds.start, bounds.end);
-        }
+        if (rangeEl) rangeEl.textContent = P.formatEasternRange(packyBounds.start, packyBounds.end);
     };
 
-    const updateSiteUI = () => {
-        document.querySelectorAll("[data-leaderboard-site]").forEach((el) => {
-            const site = el.getAttribute("data-leaderboard-site");
-            const active = site === currentSite;
-            el.classList.toggle("active", active);
-            el.setAttribute("aria-selected", active ? "true" : "false");
-        });
+    // ── Site UI (always Stake) ────────────────────────────────────────────────
 
+    const updateSiteUI = () => {
         const labelEl = document.getElementById("leaderboardSiteLabel");
-        if (labelEl) {
-            labelEl.textContent = currentSite === "packy" ? "Stake" : "Shuffle";
-        }
+        if (labelEl) labelEl.textContent = "Stake";
 
         const playBtn = document.querySelector(".play-now-btn a, #navbarNav .btn-custom");
-        if (playBtn) {
-            playBtn.href =
-                currentSite === "packy"
-                    ? "https://stake.com/?c=ffrizy"
-                    : "https://shuffle.com/?r=ffrizy";
-        }
+        if (playBtn) playBtn.href = "https://stake.com/?c=ffrizy";
 
         updatePrizes();
         updateHeroCopy();
-        window.dispatchEvent(new CustomEvent("leaderboardSiteChanged", { detail: { site: currentSite } }));
+        window.dispatchEvent(new CustomEvent("leaderboardSiteChanged", { detail: { site: "packy" } }));
     };
+
+    // ── Refresh ────────────────────────────────────────────────────────────────
 
     const startRefresh = () => {
         if (refreshInterval) return;
         refreshInterval = setInterval(updateLeaderboard, 12000);
     };
 
-    const stopRefresh = () => {
-        if (refreshInterval) {
-            clearInterval(refreshInterval);
-            refreshInterval = null;
-        }
-    };
+    // ── Render players ────────────────────────────────────────────────────────
 
     const renderPlayers = (players) => {
         const sorted = (players || [])
@@ -176,210 +115,89 @@ document.addEventListener("DOMContentLoaded", () => {
             .sort((a, b) => b.wagerAmount - a.wagerAmount)
             .slice(0, MAX_PLAYERS);
 
-        for (let index = 0; index < MAX_PLAYERS; index++) {
-            const nameEl = document.getElementById(`user${index}_name`);
-            const wagerEl = document.getElementById(`user${index}_wager`);
+        for (let i = 0; i < MAX_PLAYERS; i++) {
+            const nameEl  = document.getElementById(`user${i}_name`);
+            const wagerEl = document.getElementById(`user${i}_wager`);
             if (!nameEl || !wagerEl) continue;
 
-            if (index < sorted.length && sorted[index]) {
-                nameEl.textContent = sorted[index].username || "User";
-                wagerEl.textContent = formatCurrency(sorted[index].wagerAmount);
+            if (i < sorted.length && sorted[i]) {
+                nameEl.textContent  = sorted[i].username || "User";
+                wagerEl.textContent = formatCurrency(sorted[i].wagerAmount);
             } else {
-                nameEl.textContent = "----";
+                nameEl.textContent  = "----";
                 wagerEl.textContent = "----";
             }
         }
     };
 
-    document.querySelectorAll("[data-leaderboard-site]").forEach((el) => {
-        el.addEventListener("click", (e) => {
-            e.preventDefault();
-            const next = el.getAttribute("data-leaderboard-site");
-            if (!next || next === currentSite) return;
-
-            const prevSite = currentSite;
-            currentSite = next;
-            localStorage.setItem("leaderboardSite", currentSite);
-            leaderboardEnded = false;
-            if (rolloverTimeout) {
-                clearTimeout(rolloverTimeout);
-                rolloverTimeout = null;
-            }
-            if (inFlight[prevSite]) {
-                inFlight[prevSite].abort();
-                inFlight[prevSite] = null;
-            }
-
-            if (currentSite === "shuffle") {
-                shuffleBounds = P.getPeriodBounds("shuffle");
-                startTime = shuffleBounds.start;
-                endTime = shuffleBounds.end;
-            } else {
-                packyBounds = P.getPeriodBounds("packy");
-            }
-
-            const cached = readCache(currentSite);
-            if (cached?.players?.length) {
-                if (currentSite === "shuffle" && cached.period?.startTime && cached.period?.endTime) {
-                    shuffleBounds = {
-                        start: cached.period.startTime,
-                        end: cached.period.endTime,
-                        label: "monthly",
-                    };
-                    startTime = shuffleBounds.start;
-                    endTime = shuffleBounds.end;
-                }
-                if (currentSite === "packy" && cached.period?.startTime && cached.period?.endTime) {
-                    packyBounds = {
-                        start: cached.period.startTime,
-                        end: cached.period.endTime,
-                        label: "monthly",
-                    };
-                }
-                leaderboardEnded = Boolean(cached.ended);
-                renderPlayers(cached.players);
-            } else {
-                renderPlayers([]);
-            }
-
-            updateSiteUI();
-            startRefresh();
-            updateLeaderboard();
-        });
-    });
+    // ── Fetch leaderboard ─────────────────────────────────────────────────────
 
     const updateLeaderboard = async () => {
-        const site = currentSite;
-        const seq = (requestSeq[site] = (requestSeq[site] || 0) + 1);
-        if (inFlight[site]) return;
+        const seq = ++requestSeq;
+        if (inFlight) return;
+
         const controller = new AbortController();
-        inFlight[site] = controller;
+        inFlight = controller;
 
-        const url = new URL(ENDPOINTS[site] || ENDPOINTS.shuffle, apiOrigin);
-
-        if (site === "shuffle") {
-            const start = startTime;
-            const end = endTime;
-            url.searchParams.set("startTime", start.toString());
-            url.searchParams.set("endTime", end.toString());
-        } else {
-            url.searchParams.set("site", "packy");
-        }
+        const url = new URL(API_ENDPOINT, apiOrigin);
+        url.searchParams.set("site", "packy");
         url.searchParams.set("_t", Date.now().toString());
 
         try {
-            const cached = readCache(site);
+            const cached = readCache();
             const res = await fetch(url, { cache: "no-store", signal: controller.signal });
             if (res.status === 304) return;
-            if (!res.ok) throw new Error(`${site} API responded with ${res.status}`);
+            if (!res.ok) throw new Error(`Stake API responded with ${res.status}`);
 
             const response = await res.json();
             const dataHash = (response && (response.data_hash || response.dataHash)) || "";
 
-            const nextKey = dataHash;
-            const prevKey = cached?.dataHash || "";
-            if (nextKey && prevKey && nextKey === prevKey) return;
+            // Skip re-render if data hasn't changed
+            if (dataHash && cached?.dataHash && dataHash === cached.dataHash) return;
+            if (seq !== requestSeq) return;
 
-            if (site !== currentSite) return;
-            if (seq !== requestSeq[site]) return;
+            const data = response && Array.isArray(response.data) ? response.data : [];
 
-            if (site === "shuffle") {
-                const data =
-                    response && Array.isArray(response.data)
-                        ? response.data
-                        : Array.isArray(response)
-                          ? response
-                          : [];
-
-                if (response?.period?.startTime && response?.period?.endTime) {
-                    shuffleBounds = {
-                        start: response.period.startTime,
-                        end: response.period.endTime,
-                        label: "monthly",
-                    };
-                    startTime = shuffleBounds.start;
-                    endTime = shuffleBounds.end;
-                    updateHeroCopy();
-                }
-
-                if (response?.ended) {
-                    leaderboardEnded = true;
-                    stopRefresh();
-                    if (rolloverTimeout) clearTimeout(rolloverTimeout);
-                    const nextStart = (response.period?.endTime || endTime) + 1000;
-                    const delay = Math.max(1000, nextStart - Date.now());
-                    rolloverTimeout = setTimeout(() => {
-                        leaderboardEnded = false;
-                        shuffleBounds = P.getPeriodBounds("shuffle");
-                        startTime = shuffleBounds.start;
-                        endTime = shuffleBounds.end;
-                        updateHeroCopy();
-                        startRefresh();
-                        updateLeaderboard();
-                    }, delay);
-                }
-
-                renderPlayers(data);
-                writeCache(site, {
-                    players: data,
-                    dataHash,
-                    period: response?.period || null,
-                    ended: Boolean(response?.ended),
-                });
-            } else {
-                const data = response && Array.isArray(response.data) ? response.data : [];
-                if (response?.period?.startTime && response?.period?.endTime) {
-                    packyBounds = {
-                        start: response.period.startTime,
-                        end: response.period.endTime,
-                        label: "monthly",
-                    };
-                    updateHeroCopy();
-                }
-                renderPlayers(data);
-                writeCache(site, {
-                    players: data,
-                    dataHash,
-                    period: response?.period || null,
-                    ended: Boolean(response?.ended),
-                });
+            if (response?.period?.startTime && response?.period?.endTime) {
+                packyBounds = {
+                    start: response.period.startTime,
+                    end:   response.period.endTime,
+                    label: "monthly",
+                };
+                updateHeroCopy();
             }
+
+            renderPlayers(data);
+            writeCache({
+                players:  data,
+                dataHash,
+                period:   response?.period || null,
+                ended:    Boolean(response?.ended),
+            });
         } catch (error) {
             if (error && (error.name === "AbortError" || error.code === 20)) return;
-            console.error("Failed to load leaderboard data:", error);
-            if (site === currentSite && !(readCache(site)?.players?.length || 0)) {
-                renderPlayers([]);
-            }
+            console.error("Failed to load Stake leaderboard:", error);
+            if (!(readCache()?.players?.length)) renderPlayers([]);
         } finally {
-            if (inFlight[site] === controller) inFlight[site] = null;
+            if (inFlight === controller) inFlight = null;
         }
     };
 
-    const initialCache = readCache(currentSite);
+    // ── Init ───────────────────────────────────────────────────────────────────
+
+    const initialCache = readCache();
     if (initialCache?.players?.length) {
-        if (currentSite === "shuffle" && initialCache.period?.startTime && initialCache.period?.endTime) {
-            shuffleBounds = {
-                start: initialCache.period.startTime,
-                end: initialCache.period.endTime,
-                label: "monthly",
-            };
-            startTime = shuffleBounds.start;
-            endTime = shuffleBounds.end;
-        }
-        if (currentSite === "packy" && initialCache.period?.startTime && initialCache.period?.endTime) {
+        if (initialCache.period?.startTime && initialCache.period?.endTime) {
             packyBounds = {
                 start: initialCache.period.startTime,
-                end: initialCache.period.endTime,
+                end:   initialCache.period.endTime,
                 label: "monthly",
             };
         }
-        leaderboardEnded = Boolean(initialCache.ended);
         renderPlayers(initialCache.players);
     }
 
     updateSiteUI();
     updateLeaderboard();
-    if (!leaderboardEnded || currentSite !== "shuffle") {
-        startRefresh();
-    }
+    startRefresh();
 });
