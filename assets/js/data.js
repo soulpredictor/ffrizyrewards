@@ -13,7 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let inFlight = null;
     let requestSeq = 0;
 
-    // ── Cache helperss ──────────────────────────────────────────────────────────
+    // ── Cache helpers ──────────────────────────────────────────────────────────
 
     const readCache = () => {
         try {
@@ -164,7 +164,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     end:   response.period.endTime,
                     label: "monthly",
                 };
+                window.__LEADERBOARD_TARGET_DATE__ = response.period.endTime;
                 updateHeroCopy();
+                window.dispatchEvent(new CustomEvent("leaderboardTargetUpdated", { detail: { endTime: response.period.endTime } }));
             }
 
             renderPlayers(data);
