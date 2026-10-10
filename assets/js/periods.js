@@ -100,7 +100,7 @@
     }
 
     function getPeriodBounds(site, now = new Date()) {
-        return site === "packy" || site === "luxdrop" ? getLuxdropPeriodBounds(now) : getMonthBoundsEastern(now);
+        return site === "luxdrop" ? getLuxdropPeriodBounds(now) : getMonthBoundsEastern(now);
     }
 
     function formatEasternRange(startMs, endMs) {
